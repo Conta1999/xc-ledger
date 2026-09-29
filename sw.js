@@ -1,5 +1,5 @@
 // Offline support: app files are cached on first load so the app opens at meets with no signal.
-const CACHE = "xc-ledger-v1";
+const CACHE = "xc-ledger-v2";
 const SHELL = ["./", "index.html", "manifest.webmanifest", "apple-touch-icon.png", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => {
