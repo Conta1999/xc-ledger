@@ -1,0 +1,743 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>XC Pace Ledger</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="XC Ledger">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#EEF1EC" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1512" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: phone app shell. Sticky header, scrolling content, fixed bottom tab bar; athlete ledger pushes over the roster; forms open as bottom sheets. */
+:root{
+  --bg:#EEF1EC;        /* chalk-line paper */
+  --surface:#FFFFFF;
+  --sunk:#E3E8E1;
+  --ink:#14201A;       /* pine ink */
+  --muted:#5B6B61;
+  --line:#D2DAD2;
+  --pine:#23583F;      /* team accent */
+  --pine-soft:#DCEBE2;
+  --flag:#E9B82A;      /* course-marker yellow, used sparingly */
+  --flag-ink:#5A4300;
+  --good:#1F7A4D; --bad:#B23B2E;
+  --z-aer:#3E7C9A; --z-thr:#2F8A63; --z-vo2:#C98A12; --z-ana:#B5502F;
+  --shadow:0 1px 2px rgba(20,32,26,.06),0 6px 24px rgba(20,32,26,.08);
+  --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-num:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F1512;--surface:#18201B;--sunk:#212B25;--ink:#E6EDE8;--muted:#98A89E;--line:#2C3830;
+  --pine:#6FC196;--pine-soft:#1F3328;--flag:#F0C544;--flag-ink:#F6DA86;--good:#6FCB97;--bad:#EE8577;
+  --z-aer:#7DB8D6;--z-thr:#6FC196;--z-vo2:#EDB74A;--z-ana:#EB8D6D;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1512;--surface:#18201B;--sunk:#212B25;--ink:#E6EDE8;--muted:#98A89E;--line:#2C3830;
+  --pine:#6FC196;--pine-soft:#1F3328;--flag:#F0C544;--flag-ink:#F6DA86;--good:#6FCB97;--bad:#EE8577;
+  --z-aer:#7DB8D6;--z-thr:#6FC196;--z-vo2:#EDB74A;--z-ana:#EB8D6D;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);color-scheme:dark}
+
+*{box-sizing:border-box}
+html,body{margin:0}
+[hidden]{display:none!important}
+img{max-width:100%}
+body{overscroll-behavior-y:none}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--f-body);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--pine);outline-offset:2px}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+
+.app{max-width:560px;margin:0 auto;min-height:100%;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+.top{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(14px + env(safe-area-inset-top,0px)) calc(16px + env(safe-area-inset-right,0px)) 10px calc(16px + env(safe-area-inset-left,0px));display:flex;align-items:center;gap:10px;border-bottom:1px solid transparent}
+.top.scrolled{border-bottom-color:var(--line)}
+.top h1{font:700 30px/1 var(--f-display);letter-spacing:.01em;margin:0;text-transform:uppercase;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top .sub{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.iconbtn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;flex:none}
+.iconbtn svg{width:20px;height:20px}
+.btn{border:0;border-radius:12px;padding:12px 16px;font-weight:600;background:var(--pine);color:var(--surface);display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.btn.ghost{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+.btn.danger{background:transparent;color:var(--bad);border:1px solid var(--line)}
+.btn.block{width:100%}
+.btn svg{width:18px;height:18px}
+.wrap{padding:0 16px}
+.stack{display:flex;flex-direction:column;gap:12px}
+
+/* tab bar */
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px))}
+.tabs-in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr)}
+.tab{background:none;border:0;padding:6px 0 4px;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--muted);font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.tab svg{width:24px;height:24px}
+.tab[aria-current="page"]{color:var(--pine)}
+
+/* chips & segmented */
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 16px 4px;margin:0 -16px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 13px;font-size:13px;font-weight:600;white-space:nowrap}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;background:var(--sunk);border-radius:12px;padding:3px;gap:3px}
+.seg button{border:0;background:transparent;border-radius:9px;padding:8px 6px;font-weight:600;font-size:13px;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.label{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+
+/* roster */
+.search{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:0 12px}
+.search input{border:0;background:transparent;padding:11px 0;flex:1;min-width:0;outline:none}
+.search svg{width:18px;height:18px;color:var(--muted)}
+.list{background:var(--surface);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+.row{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:12px 14px;border:0;background:none;width:100%;text-align:left;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.bib{width:44px;height:44px;border-radius:8px;background:var(--pine-soft);color:var(--pine);display:grid;place-items:center;font:700 20px/1 var(--f-display);position:relative;overflow:hidden}
+.bib::before,.bib::after{content:"";position:absolute;top:5px;width:4px;height:4px;border-radius:50%;background:var(--surface)}
+.bib::before{left:5px}.bib::after{right:5px}
+.row .name{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .meta{font-size:12.5px;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .right{text-align:right}
+.big{font:600 17px/1.1 var(--f-num)}
+.small{font-size:12px;color:var(--muted)}
+.up{color:var(--good)}.down{color:var(--bad)}
+.pill{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:6px;background:var(--sunk);color:var(--muted);vertical-align:1px}
+.pill.pr{background:var(--flag);color:#3A2B00}
+.pill.basis{background:var(--pine-soft);color:var(--pine)}
+.pill.sample{background:var(--flag);color:#3A2B00}
+.notice{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:12px;background:var(--sunk);font-size:13px;color:var(--muted)}
+.notice button{margin-left:auto;flex:none;border:0;background:none;color:var(--pine);font-weight:700;padding:4px}
+.empty{padding:28px 20px;text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center}
+.empty h2{font:700 24px/1.1 var(--f-display);text-transform:uppercase;margin:0}
+.empty p{margin:0;color:var(--muted);max-width:34ch}
+.sectionhead{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:6px}
+
+/* athlete */
+.hero{background:var(--ink);color:var(--bg);border-radius:18px;padding:16px;display:grid;gap:14px;position:relative;overflow:hidden}
+.hero .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.hero .stat .label{color:color-mix(in srgb,var(--bg) 60%,transparent)}
+.hero .stat .v{font:600 22px/1.1 var(--f-num);margin-top:3px}
+.hero .basis{font-size:13px;color:color-mix(in srgb,var(--bg) 75%,transparent)}
+.hero .basis b{color:var(--bg)}
+.hero svg.spark{width:100%;height:64px;display:block}
+.hero .flagstripe{position:absolute;right:-18px;top:14px;width:90px;height:10px;background:var(--flag);transform:rotate(35deg);opacity:.9}
+.zone{display:grid;grid-template-columns:6px 1fr auto;gap:12px;align-items:center;padding:11px 14px 11px 0;border-top:1px solid var(--line)}
+.zone:first-child{border-top:0}
+.zone .bar{align-self:stretch;border-radius:0 4px 4px 0}
+.zone .zn{font-weight:600;font-size:14px}
+.zone .zd{font-size:12px;color:var(--muted)}
+.zone .zt{text-align:right;font:600 15px/1.2 var(--f-num);white-space:nowrap}
+.zone .zt small{display:block;font:500 11.5px/1.3 var(--f-num);color:var(--muted)}
+.entry{display:grid;grid-template-columns:52px 1fr auto;gap:12px;align-items:center;padding:12px 14px;border-top:1px solid var(--line);width:100%;background:none;border-left:0;border-right:0;border-bottom:0;text-align:left}
+.entry:first-child{border-top:0}
+.date{text-align:center;line-height:1}
+.date .mo{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.date .dy{font:700 24px/1 var(--f-display);margin-top:2px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:1px;background:var(--line)}
+.grid2>div{background:var(--surface);padding:10px 14px}
+.grid2 .d{font-size:12px;color:var(--muted);font-weight:600}
+.grid2 .t{font:600 17px/1.3 var(--f-num)}
+.grid2 .p{font:500 11.5px/1.3 var(--f-num);color:var(--muted)}
+.grid2 .hl{background:var(--pine-soft)}
+
+/* calculator */
+.card{background:var(--surface);border-radius:16px;box-shadow:var(--shadow);padding:16px}
+.field{display:flex;flex-direction:column;gap:6px}
+.field input,.field select,.field textarea{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:11px 12px;width:100%;min-width:0;font-size:16px}
+.field textarea{min-height:70px;resize:vertical}
+.field .hint{font-size:12px;color:var(--muted)}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.fields .full{grid-column:1/-1}
+.scrollx{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table.t{border-collapse:collapse;font-size:13px;white-space:nowrap;width:100%}
+table.t th,table.t td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:right}
+table.t th{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:var(--surface)}
+table.t td{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+table.t td:first-child,table.t th:first-child{text-align:left;position:sticky;left:0;background:var(--surface);font-family:var(--f-body);font-weight:600;z-index:1}
+table.t td .s{display:block;color:var(--muted);font-size:11.5px}
+.ratingbig{font:700 56px/1 var(--f-display)}
+
+/* workout */
+.wo-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:11px 14px;border-top:1px solid var(--line)}
+.wo-row:first-child{border-top:0}
+.wo-row .t{font:600 17px/1.2 var(--f-num);text-align:right;white-space:nowrap}
+.grouphead{padding:8px 14px;background:var(--sunk);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+
+/* sheet */
+.scrim{position:fixed;inset:0;background:rgba(10,16,13,.45);z-index:40;opacity:0;transition:opacity .2s}
+.scrim.on{opacity:1}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;max-width:560px;margin:0 auto;background:var(--bg);border-radius:20px 20px 0 0;max-height:92%;overflow:auto;padding:8px 16px calc(20px + env(safe-area-inset-bottom,0px));transform:translateY(100%);transition:transform .25s cubic-bezier(.2,.8,.2,1)}
+.sheet.on{transform:none}
+.sheet .grab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:4px auto 10px}
+.sheet h2{font:700 26px/1.1 var(--f-display);text-transform:uppercase;margin:0 0 14px}
+.sheet .actions{display:flex;gap:10px;margin-top:16px}
+.sheet .actions .btn{flex:1}
+.confirm{margin-top:12px;padding:12px;border-radius:12px;background:var(--sunk);display:flex;flex-direction:column;gap:10px;font-size:14px}
+.toast{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-weight:600;font-size:14px;opacity:0;transition:.2s;z-index:60;pointer-events:none;max-width:calc(100% - 32px)}
+.toast.on{opacity:1;transform:translateX(-50%)}
+@media (prefers-reduced-motion:reduce){.sheet,.scrim,.toast{transition:none}}
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<nav class="tabs" aria-label="Sections"><div class="tabs-in" id="tabs"></div></nav>
+<div id="sheetRoot"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* ============ Tinman engine (formulas match Final Surge's Tinman calculator) ============ */
+const DIST = [
+  {g:"Cross country",k:"4k",label:"4K",km:4},{g:"Cross country",k:"5k",label:"5K",km:5},{g:"Cross country",k:"6k",label:"6K",km:6},{g:"Cross country",k:"8k",label:"8K",km:8},
+  {g:"Cross country",k:"2mi",label:"2 miles",km:3.218688},{g:"Cross country",k:"2.5mi",label:"2.5 miles",km:4.02336},{g:"Cross country",k:"3mi",label:"3 miles",km:4.828032},{g:"Cross country",k:"4mi",label:"4 miles",km:6.437376},
+  {g:"Track",k:"400m",label:"400m",km:.4},{g:"Track",k:"800m",label:"800m",km:.8},{g:"Track",k:"1500m",label:"1500m",km:1.5},{g:"Track",k:"1600m",label:"1600m",km:1.6},{g:"Track",k:"1mi",label:"Mile",km:1.609344},
+  {g:"Track",k:"3000m",label:"3000m",km:3},{g:"Track",k:"3200m",label:"3200m",km:3.2},
+  {g:"Road",k:"10k",label:"10K",km:10},{g:"Road",k:"15k",label:"15K",km:15},{g:"Road",k:"half",label:"Half marathon",km:21.0974537664},{g:"Road",k:"marathon",label:"Marathon",km:42.1949075328},
+  {g:"Other",k:"custom",label:"Custom distance",km:null}
+];
+const DMAP = Object.fromEntries(DIST.map(d=>[d.k,d]));
+const EQUIV = [["800m",.8],["1500m",1.5],["1600m",1.6],["Mile",1.609344],["3000m",3],["3200m",3.2],["2 miles",3.218688],["4K",4],["2.5 miles",4.02336],["3 miles",4.828032],["5K",5],["6K",6],["4 miles",6.437376],["8K",8],["10K",10]];
+const ZONES = [
+  {n:"Recovery",lo:.499999999999999,hi:.549999999999999,miss:0,c:"--z-aer",d:"Shakeouts, cooldowns"},
+  {n:"Easy",lo:.574999999999999,hi:.624999999999999,miss:0,c:"--z-aer",d:"Daily aerobic miles"},
+  {n:"Moderate",lo:.649999999999999,hi:.699999999999999,miss:0,c:"--z-aer",d:"Steady runs, long runs"},
+  {n:"Tempo",lo:.749999999999999,hi:.799999999999999,miss:0,c:"--z-thr",d:"Continuous tempo runs"},
+  {n:"Threshold",lo:.824999999999999,hi:.854999999999999,miss:0,c:"--z-thr",d:"MLSS · cruise intervals"},
+  {n:"CV",lo:.874999999999999,hi:.899999999999999,miss:0,c:"--z-thr",d:"Critical velocity reps"},
+  {n:"Aerobic Power",lo:.92499999999999,hi:.95499999999999,miss:0,c:"--z-vo2",d:"Long VO2 reps"},
+  {n:"VO2 max",lo:.97499999999999,hi:1,miss:0,c:"--z-vo2",d:"Hard intervals"},
+  {n:"Mixed Zone",lo:1.05,hi:1.1,miss:0,c:"--z-vo2",d:"Mile-type reps"},
+  {n:"Anaerobic Capacity",lo:1.15,hi:1.2,maxM:800,c:"--z-ana",d:"Reps of 800m or less"},
+  {n:"Anaerobic Power",lo:1.25,hi:1.3,maxM:500,c:"--z-ana",d:"Reps of 500m or less"},
+  {n:"Speed Endurance",lo:1.35,hi:1.4,maxM:300,c:"--z-ana",d:"Reps of 300m or less"},
+  {n:"Speed",lo:1.45,hi:1.5,maxM:100,c:"--z-ana",d:"Sprints, 100m"}
+];
+const REPS = [[100,"100"],[200,"200"],[300,"300"],[400,"400"],[500,"500"],[600,"600"],[800,"800"],[1000,"1K"],[1200,"1200"],[1600,"1600"],[1609.344,"Mile"],[2000,"2K"],[3200,"3200"]];
+
+const Tin = {
+  base(km, sec, gender){
+    let n;
+    if(km>=3) n=.00020960050866*Math.pow(1e3*km,1.05794632923601);
+    else if(km>=.8){const o=km/3;n=-1.9322997266*o**4+4.545124741*o**3-3.6776695099*o**2+2.2510185164*o-.1861740208}
+    else{const m=km/3;n=-3.0124583021*m**3+2.2687044727*m**2+.4521524043*m+.0042132813}
+    const t3k=sec/n, v=t3k/3*(-.0528490338*Math.log(t3k/60)+1.10283947123919);
+    const f=1e3/(v/60), r=1.135e-7*f**3+.19*f+2.2;
+    return {t3k, v, rating: gender==="f" ? 1.133*r*.01129 : .01129*r};
+  },
+  equiv(km, t3k){
+    const e=1e3*km, r=e/3e3;
+    const f=(e<=1500||e===3e3) ? -4.16259*r**6+7.39963*r**5-1.8619*r**4-3.17729*r**3+2.35405*r**2+.44362*r+.00448
+      : e<=2400 ? 1.0667*r-.0667 : .00020960050866*Math.pow(e,1.05794632923);
+    return f*t3k;
+  },
+  zone(v, z, meters){ // returns [slow, fast] seconds for a rep of `meters`
+    if(z.maxM && meters>z.maxM+0.5) return null;
+    return [v/Math.pow(z.lo,.7931)*meters/1e3, v/Math.pow(z.hi,.7931)*meters/1e3];
+  }
+};
+
+/* ============ helpers ============ */
+const $ = s=>document.querySelector(s);
+const esc = s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function parseTime(s){
+  s=String(s||"").trim();
+  if(!s||!/^[\d:.]+$/.test(s)) return NaN;
+  if(!s.includes(":") && !s.includes(".") && s.length>=3){ // "1745" → 17:45, "10230" → 1:02:30
+    const ss=+s.slice(-2), mm=+s.slice(-4,-2), hh=s.length>4?+s.slice(0,-4):0;
+    return ss<60&&mm<60 ? hh*3600+mm*60+ss : NaN;
+  }
+  const p=s.split(":"); if(p.length>3||p.some(x=>x===""||isNaN(+x))) return NaN;
+  return p.reduce((t,x)=>t*60+parseFloat(x),0);
+}
+function fmt(s,dec=0){
+  if(!isFinite(s)) return "–";
+  const f=10**dec; s=Math.round(s*f)/f;
+  const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s-h*3600-m*60;
+  let ss=sec.toFixed(dec); if(sec<10 && (h||m)) ss="0"+ss;
+  if(h) return `${h}:${String(m).padStart(2,"0")}:${ss}`;
+  if(m) return `${m}:${ss}`;
+  return ss;
+}
+const fmtRace = s => fmt(s, s<600 && Math.abs(s-Math.round(s))>.001 ? 1 : 0);
+const fmtSplit = s => s<30 ? fmt(s,1) : s<90 ? String(Math.round(s)) : fmt(s,0);
+const fmtEq = s => fmt(s, s<300?1:0);
+// Both ends of a split range use the same style, chosen by the slower end.
+const fmtRange = p => { const f = p[0]<30 ? x=>fmt(x,1) : p[0]<90 ? x=>String(Math.round(x)) : x=>fmt(x,0); return `${f(p[0])}–${f(p[1])}`; };
+const today = ()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`};
+const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const dparts = iso=>{const [y,m,d]=(iso||"").split("-").map(Number);return {mo:MON[(m||1)-1],dy:d||"",y}};
+const fmtDate = iso=>{const p=dparts(iso);return `${p.mo} ${p.dy}`};
+const uid = ()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const initials = n=>String(n||"?").replace(/^Sample · /,"").split(/\s+/).map(w=>w[0]).join("").slice(0,2).toUpperCase();
+const distLabel = r => r.distKey==="custom" ? `${r.meters}m` : (DMAP[r.distKey]?.label||r.distKey);
+const distKm = r => r.distKey==="custom" ? (+r.meters||0)/1000 : DMAP[r.distKey]?.km;
+const repLabel = m => (REPS.find(r=>Math.abs(r[0]-m)<.5)||[m,m+"m"])[1];
+
+function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("on");clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove("on"),2000)}
+async function copyText(text){
+  try{await navigator.clipboard.writeText(text);toast("Copied to clipboard");}
+  catch{openSheet({type:"copy",text});}
+}
+
+/* ============ store: shared db when available, this device otherwise ============ */
+const S = {athletes:{}, results:{}, mode:"loading"};
+const LS_KEY="xc-ledger-v1";
+function lsLoad(){try{const d=JSON.parse(localStorage.getItem(LS_KEY)||"{}");S.athletes=d.athletes||{};S.results=d.results||{};}catch{}}
+function lsSave(){try{localStorage.setItem(LS_KEY,JSON.stringify({athletes:S.athletes,results:S.results}))}catch{toast("Couldn't save. Your phone may be out of storage.")}}
+const SET={team:"",lastBackup:0};
+try{Object.assign(SET,JSON.parse(localStorage.getItem("xc-ledger-settings")||"{}"))}catch{}
+function saveSet(){try{localStorage.setItem("xc-ledger-settings",JSON.stringify(SET))}catch{}}
+function initStore(){
+  S.mode="local"; lsLoad();
+  try{ navigator.storage?.persist?.(); }catch{}
+  render();
+}
+async function put(coll,id,data){
+  const body={...data}; delete body.id;
+  S[coll][id]={...body,id};
+  lsSave();
+  render();
+}
+async function del(coll,id){
+  delete S[coll][id];
+  lsSave();
+}
+/* ============ derived data ============ */
+function resultsFor(aid){return Object.values(S.results).filter(r=>r.athleteId===aid).sort((a,b)=>(b.date||"").localeCompare(a.date||"")||(b.created||0)-(a.created||0))}
+function effSec(r){return (+r.seconds||0)+(+r.adj||0)}
+function resultCalc(r,gender){const km=distKm(r);if(!km||!r.seconds) return null;return Tin.base(km,effSec(r),gender)}
+function basisOf(a){
+  const rs=resultsFor(a.id);
+  const pinned = a.basisId && rs.find(r=>r.id===a.basisId);
+  return pinned || rs[0] || null;
+}
+function athleteCalc(a){const b=basisOf(a);if(!b) return null;const c=resultCalc(b,a.gender);return c?{...c,basis:b}:null}
+function prIds(rs){
+  const best={};
+  rs.forEach(r=>{const k=r.distKey==="custom"?"c"+r.meters:r.distKey;if(!best[k]||+r.seconds<+best[k].seconds) best[k]=r});
+  return new Set(Object.values(best).map(r=>r.id));
+}
+function groups(){return [...new Set(Object.values(S.athletes).map(a=>a.group).filter(Boolean))].sort()}
+
+/* ============ UI state ============ */
+const U = {view:"roster", athlete:null, q:"", grp:"All", gender:"all", sort:"rating", atab:"paces", rep:400,
+  wo:{zone:5, rep:1000, grp:"All", gender:"all"},
+  calc:{dist:"5k", meters:"", time:"", gender:"m"}};
+try{const s=JSON.parse(localStorage.getItem("xc-ledger-ui")||"{}");if(s.wo)Object.assign(U.wo,s.wo);if(s.rep)U.rep=s.rep;if(s.sort)U.sort=s.sort}catch{}
+function saveUI(){try{localStorage.setItem("xc-ledger-ui",JSON.stringify({wo:U.wo,rep:U.rep,sort:U.sort}))}catch{}}
+
+const I = {
+  roster:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c.6-3.4 3-5.4 6-5.4s5.4 2 6 5.4"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14.2c2.4.2 4 1.9 4.5 4.8"/></svg>',
+  workout:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M10 2h4M12 2v3"/></svg>',
+  calc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2.5"/><path d="M8.5 7h7M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01M8.5 15h.01M12 15h.01M15.5 15v2.5M8.5 18h.01M12 18h.01"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+  edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4"/></svg>',
+  copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
+  gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>'
+};
+
+/* ============ render ============ */
+function render(){
+  const app=$("#app");
+  let html="";
+  if(U.athlete && S.athletes[U.athlete]) html=viewAthlete(S.athletes[U.athlete]);
+  else { U.athlete=null; html = U.view==="roster"?viewRoster(): U.view==="workout"?viewWorkout(): viewCalc(); }
+  // Preserve focus on calc/search inputs across re-render
+  const fid=document.activeElement?.id, sel=[document.activeElement?.selectionStart,document.activeElement?.selectionEnd];
+  app.innerHTML=html;
+  if(fid){const el=document.getElementById(fid); if(el&&el.tagName==="INPUT"){el.focus(); try{el.setSelectionRange(sel[0],sel[1])}catch{}}}
+  $("#tabs").innerHTML=[["roster","Roster"],["workout","Workout"],["calc","Calculator"]].map(([k,l])=>
+    `<button class="tab" data-act="tab" data-v="${k}" ${U.view===k&&!U.athlete?'aria-current="page"':''}>${I[k]}${l}</button>`).join("");
+  if(U.view==="calc"&&!U.athlete) renderCalcOut();
+}
+
+function viewRoster(){
+  const all=Object.values(S.athletes);
+  const head=`<header class="top"><div style="flex:1;min-width:0"><div class="sub">Cross country</div><h1>${esc(SET.team||"Team Ledger")}</h1></div>
+    <button class="iconbtn" data-act="settings" aria-label="Team settings and backup">${I.gear}</button>
+    <button class="btn" data-act="addAthlete" aria-label="Add athlete">${I.plus}Runner</button></header>`;
+  if(S.mode==="loading") return head+`<div class="wrap"><div class="card empty"><p>Loading your roster…</p></div></div>`;
+  if(!all.length) return head+`<div class="wrap stack">
+    ${modeNotice()}
+    <div class="card empty">
+      <div class="bib" style="width:64px;height:64px;font-size:28px">XC</div>
+      <h2>Build your roster</h2>
+      <p>Add each runner, then log their races and time trials. Every entry updates their Tinman training paces automatically.</p>
+      <button class="btn block" data-act="addAthlete">${I.plus}Add first runner</button>
+      <button class="btn ghost block" data-act="seed">Try it with 4 sample runners</button>
+    </div></div>`;
+  const gs=groups();
+  let list=all.filter(a=>(U.grp==="All"||a.group===U.grp)&&(U.gender==="all"||a.gender===U.gender)&&(!U.q||a.name.toLowerCase().includes(U.q.toLowerCase())));
+  const withCalc=list.map(a=>({a,c:athleteCalc(a)}));
+  withCalc.sort((x,y)=>U.sort==="name"?x.a.name.localeCompare(y.a.name):(y.c?.rating||0)-(x.c?.rating||0)||x.a.name.localeCompare(y.a.name));
+  const hasSample=all.some(a=>a.sample);
+  return head+`<div class="wrap stack">
+    ${modeNotice()}
+    ${hasSample?`<div class="notice"><span class="pill sample">Sample</span>Example runners are in your roster.<button data-act="unseed">Remove</button></div>`:""}
+    <label class="search">${I.search}<input id="q" type="search" placeholder="Search ${all.length} runners" value="${esc(U.q)}" autocomplete="off"></label>
+    <div class="chips">${["All",...gs].map(g=>`<button class="chip" data-act="grp" data-v="${esc(g)}" aria-pressed="${U.grp===g}">${esc(g)}</button>`).join("")}
+      <span style="width:1px;background:var(--line);flex:none"></span>
+      ${[["all","Everyone"],["f","Girls"],["m","Boys"]].map(([k,l])=>`<button class="chip" data-act="gender" data-v="${k}" aria-pressed="${U.gender===k}">${l}</button>`).join("")}</div>
+    <div class="sectionhead"><span class="label">${withCalc.length} runner${withCalc.length===1?"":"s"}</span>
+      <div class="seg" style="width:170px"><button data-act="sort" data-v="rating" aria-pressed="${U.sort==="rating"}">Rating</button><button data-act="sort" data-v="name" aria-pressed="${U.sort==="name"}">Name</button></div></div>
+    <div class="list">${withCalc.map(({a,c})=>{
+      const rs=resultsFor(a.id); const prev=rs[1]?resultCalc(rs[1],a.gender):null, cur=rs[0]?resultCalc(rs[0],a.gender):null;
+      const trend = prev&&cur ? cur.rating-prev.rating : 0;
+      return `<button class="row" data-act="open" data-id="${a.id}">
+        <div class="bib">${esc(initials(a.name))}</div>
+        <div style="min-width:0"><div class="name">${esc(a.name)} ${a.sample?'<span class="pill sample">Sample</span>':""}</div>
+        <div class="meta">${[a.grade?`Gr ${esc(a.grade)}`:"",esc(a.group||""),`${rs.length} entr${rs.length===1?"y":"ies"}`].filter(Boolean).join(" · ")}</div></div>
+        <div class="right">${c?`<div class="big">${fmtEq(Tin.equiv(5,c.t3k))}</div><div class="small">5K eq · ${(c.rating*100).toFixed(1)}%${trend?` <span class="${trend>0?"up":"down"}">${trend>0?"▲":"▼"}</span>`:""}</div>`:`<div class="small">No results yet</div>`}</div>
+      </button>`}).join("")||`<div class="empty"><p>No runners match these filters.</p></div>`}</div>
+  </div>`;
+}
+function modeNotice(){
+  const n=Object.values(S.results).filter(r=>!r.sample).length, days=(Date.now()-(SET.lastBackup||0))/864e5;
+  return n>=5 && days>30 ? `<div class="notice">Your roster lives on this phone. ${SET.lastBackup?`Last backup was ${Math.floor(days)} days ago.`:"Save a backup so a lost phone doesn't lose the season."}<button data-act="settings">Back up</button></div>`:"";
+}
+
+function sparkSVG(a){
+  const rs=resultsFor(a.id).filter(r=>r.kind!=="workout").slice().reverse();
+  const pts=rs.map(r=>{const c=resultCalc(r,a.gender);return c?{d:r.date,v:Tin.equiv(5,c.t3k)}:null}).filter(Boolean);
+  if(pts.length<2) return `<div class="small" style="color:color-mix(in srgb,var(--bg) 65%,transparent)">Log two or more races to see the season trend.</div>`;
+  const W=320,H=64,P=6, vs=pts.map(p=>p.v), lo=Math.min(...vs), hi=Math.max(...vs), span=Math.max(hi-lo,5);
+  const x=i=>P+i*(W-2*P-44)/(pts.length-1), y=v=>P+(v-lo)/span*(H-2*P); // faster = higher on the chart
+  const d=pts.map((p,i)=>`${i?"L":"M"}${x(i).toFixed(1)} ${y(p.v).toFixed(1)}`).join(" ");
+  const last=pts[pts.length-1], li=pts.length-1;
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" role="img" aria-label="5K-equivalent trend, latest ${fmtEq(last.v)}">
+    <path d="${d} L${x(li)} ${H} L${x(0)} ${H} Z" fill="var(--pine)" opacity=".25"/>
+    <path d="${d}" fill="none" stroke="var(--flag)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+    ${pts.map((p,i)=>`<circle cx="${x(i)}" cy="${y(p.v)}" r="${i===li?4:2.2}" fill="${i===li?"var(--flag)":"var(--bg)"}"/>`).join("")}
+    <text x="${x(li)+8}" y="${Math.min(Math.max(y(last.v)+4,12),H-4)}" fill="var(--bg)" font-family="IBM Plex Mono,monospace" font-size="12" font-weight="600">${fmtEq(last.v)}</text></svg>`;
+}
+
+function viewAthlete(a){
+  const c=athleteCalc(a), rs=resultsFor(a.id), prs=prIds(rs);
+  const head=`<header class="top"><button class="iconbtn" data-act="back" aria-label="Back to roster">${I.back}</button>
+    <div style="flex:1;min-width:0"><div class="sub">${[a.grade?`Grade ${esc(a.grade)}`:"",esc(a.group||""),a.gender==="f"?"Girls":"Boys"].filter(Boolean).join(" · ")}</div><h1>${esc(a.name)}</h1></div>
+    <button class="iconbtn" data-act="editAthlete" data-id="${a.id}" aria-label="Edit runner">${I.edit}</button></header>`;
+  const hero=`<section class="hero"><span class="flagstripe" aria-hidden="true"></span>
+    <div class="stats">
+      <div class="stat"><div class="label">Tinman rating</div><div class="v">${c?(c.rating*100).toFixed(1)+"%":"–"}</div></div>
+      <div class="stat"><div class="label">5K equiv</div><div class="v">${c?fmtEq(Tin.equiv(5,c.t3k)):"–"}</div></div>
+      <div class="stat"><div class="label">Easy ≈ /mi</div><div class="v">${c?fmt(Tin.zone(c.v,ZONES[1],1609.344).reduce((x,y)=>x+y)/2):"–"}</div></div>
+    </div>
+    <div class="basis">${c?`Paces from <b>${esc(distLabel(c.basis))} · ${fmtRace(+c.basis.seconds)}</b>${+c.basis.adj?` (${+c.basis.adj>0?"+":""}${c.basis.adj}s course adj.)`:""} · ${esc(c.basis.meet||c.basis.kind)} · ${fmtDate(c.basis.date)}`:"Log a race or time trial to set training paces."}</div>
+    ${sparkSVG(a)}</section>`;
+  let body="";
+  if(U.atab==="paces"){
+    body = c ? `<div class="chips">${REPS.map(([m,l])=>`<button class="chip" data-act="rep" data-v="${m}" aria-pressed="${Math.abs(U.rep-m)<.5}">${l}</button>`).join("")}</div>
+      <div class="list">${ZONES.map(z=>{const p=Tin.zone(c.v,z,U.rep), mi=Tin.zone(c.v,z,1609.344);
+        return `<div class="zone"><span class="bar" style="background:var(${z.c})"></span><div><div class="zn">${z.n}</div><div class="zd">${z.d}</div></div>
+        <div class="zt">${p?`${fmtRange(p)}`:"–"}<small>${mi?`${fmt(mi[0])}–${fmt(mi[1])} /mi`:`≤ ${z.maxM}m reps`}</small></div></div>`}).join("")}</div>
+      <p class="small" style="margin:0">Ranges run slow to fast for one ${repLabel(U.rep)} rep on flat ground.</p>
+      <button class="btn ghost block" data-act="copyPaces">${I.copy}Copy paces to send</button>`
+      : `<div class="card empty"><p>No results yet. Add a race or time trial and this runner's paces appear here.</p><button class="btn" data-act="addResult">${I.plus}Add result</button></div>`;
+  } else if(U.atab==="ledger"){
+    body = rs.length ? `<div class="list">${rs.map((r,i)=>{
+      const rc=resultCalc(r,a.gender), prev=rs.slice(i+1).find(x=>x.kind!=="workout"), pc=prev&&resultCalc(prev,a.gender);
+      const dl= rc&&pc ? (rc.rating-pc.rating)*100 : null; const p=dparts(r.date);
+      return `<button class="entry" data-act="editResult" data-id="${r.id}">
+        <div class="date"><div class="mo">${p.mo}</div><div class="dy">${p.dy}</div></div>
+        <div style="min-width:0"><div class="name" style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.meet||(r.kind==="tt"?"Time trial":"Race"))}</div>
+          <div class="small">${esc(distLabel(r))} · ${r.kind==="tt"?"Time trial":r.kind==="workout"?"Workout":"Race"}${prs.has(r.id)?' <span class="pill pr">PR</span>':""}${c&&c.basis.id===r.id?' <span class="pill basis">Pace basis</span>':""}</div>
+          ${r.notes?`<div class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.notes)}</div>`:""}</div>
+        <div class="right"><div class="big">${fmtRace(+r.seconds)}</div><div class="small">${rc?(rc.rating*100).toFixed(1)+"%":""}${dl!=null&&Math.abs(dl)>=.05?` <span class="${dl>0?"up":"down"}">${dl>0?"+":""}${dl.toFixed(1)}</span>`:""}</div></div>
+      </button>`}).join("")}</div>
+      <p class="small" style="margin:0">Tap an entry to edit it or make it the pace basis. Rating change compares to the previous entry.</p>`
+      : `<div class="card empty"><p>The ledger is empty. Every race and time trial you log shows up here with its rating and PR status.</p></div>`;
+    body+=`<button class="btn block" data-act="addResult">${I.plus}Add result</button>`;
+  } else {
+    body = c ? `<div class="list"><div class="grid2">${EQUIV.map(([l,km])=>{const t=Tin.equiv(km,c.t3k);
+      return `<div class="${Math.abs(km-distKm(c.basis))<.001?"hl":""}"><div class="d">${l}</div><div class="t">${fmtEq(t)}</div><div class="p">${fmt(t/km*1.609344)} /mi</div></div>`}).join("")}</div></div>
+      <p class="small" style="margin:0">Predicted times across distances from the current pace basis, on a flat course.</p>`
+      : `<div class="card empty"><p>Add a result to see equivalent times.</p></div>`;
+  }
+  return head+`<div class="wrap stack">${hero}
+    <div class="seg"><button data-act="atab" data-v="paces" aria-pressed="${U.atab==="paces"}">Paces</button><button data-act="atab" data-v="ledger" aria-pressed="${U.atab==="ledger"}">Ledger · ${rs.length}</button><button data-act="atab" data-v="equiv" aria-pressed="${U.atab==="equiv"}">Equivalents</button></div>
+    ${body}${a.notes?`<div class="card"><div class="label">Coach notes</div><div style="white-space:pre-wrap;margin-top:6px">${esc(a.notes)}</div></div>`:""}</div>`;
+}
+
+function viewWorkout(){
+  const w=U.wo, z=ZONES[w.zone];
+  const all=Object.values(S.athletes).filter(a=>(w.grp==="All"||a.group===w.grp)&&(w.gender==="all"||a.gender===w.gender));
+  const rows=all.map(a=>({a,c:athleteCalc(a)})).sort((x,y)=>(y.c?.rating||0)-(x.c?.rating||0)||x.a.name.localeCompare(y.a.name));
+  const ok=!z.maxM||w.rep<=z.maxM+.5;
+  const gs=groups();
+  return `<header class="top"><div style="flex:1;min-width:0"><div class="sub">Today's session</div><h1>Workout Splits</h1></div>
+    <button class="iconbtn" data-act="copyWorkout" aria-label="Copy split sheet">${I.copy}</button></header>
+  <div class="wrap stack">
+    <div class="label">Intensity</div>
+    <div class="chips">${ZONES.map((zz,i)=>`<button class="chip" data-act="wzone" data-v="${i}" aria-pressed="${w.zone===i}" style="${w.zone===i?"":`border-color:color-mix(in srgb,var(${zz.c}) 45%,var(--line))`}">${zz.n}</button>`).join("")}</div>
+    <div class="label">Rep distance</div>
+    <div class="chips">${REPS.map(([m,l])=>`<button class="chip" data-act="wrep" data-v="${m}" aria-pressed="${Math.abs(w.rep-m)<.5}">${l}</button>`).join("")}</div>
+    <div class="chips">${["All",...gs].map(g=>`<button class="chip" data-act="wgrp" data-v="${esc(g)}" aria-pressed="${w.grp===g}">${esc(g)}</button>`).join("")}
+      <span style="width:1px;background:var(--line);flex:none"></span>
+      ${[["all","Everyone"],["f","Girls"],["m","Boys"]].map(([k,l])=>`<button class="chip" data-act="wgender" data-v="${k}" aria-pressed="${w.gender===k}">${l}</button>`).join("")}</div>
+    <div class="card" style="padding:12px 14px;display:flex;gap:12px;align-items:center">
+      <span style="width:6px;align-self:stretch;border-radius:3px;background:var(${z.c})"></span>
+      <div style="flex:1"><div style="font:700 22px/1.1 var(--f-display);text-transform:uppercase">${repLabel(w.rep)} @ ${z.n}</div><div class="small">${z.d}. Slow–fast range per rep${z.maxM?`, for reps up to ${z.maxM}m`:""}.</div></div>
+    </div>
+    ${!ok?`<div class="notice">${z.n} is meant for reps of ${z.maxM}m or less. Pick a shorter rep.</div>`:""}
+    <div class="list">${rows.length?rows.map(({a,c})=>{const p=c&&ok?Tin.zone(c.v,z,w.rep):null;
+      return `<div class="wo-row"><div style="min-width:0"><div class="name" style="font-weight:600">${esc(a.name)}</div><div class="small">${c?`${(c.rating*100).toFixed(1)}% · ${esc(a.group||"")}`:"No results yet"}</div></div>
+      <div class="t">${p?`${fmtRange(p)}`:"–"}</div></div>`}).join(""):`<div class="empty"><p>No runners here yet. Add runners on the Roster tab.</p></div>`}</div>
+    ${rows.length?`<button class="btn ghost block" data-act="copyWorkout">${I.copy}Copy split sheet</button>`:""}
+  </div>`;
+}
+
+function viewCalc(){
+  const k=U.calc;
+  return `<header class="top"><div style="flex:1;min-width:0"><div class="sub">Tinman · Tom Schwartz</div><h1>Pace Calculator</h1></div></header>
+  <div class="wrap stack">
+    <div class="card stack">
+      <div class="fields">
+        <div class="field"><label class="label" for="cDist">Race distance</label>${distSelect("cDist",k.dist)}</div>
+        <div class="field"><label class="label" for="cTime">Race time</label><input id="cTime" inputmode="decimal" placeholder="17:45" value="${esc(k.time)}" autocomplete="off"></div>
+        <div class="field full" ${k.dist==="custom"?"":"hidden"} id="cMetersWrap"><label class="label" for="cMeters">Distance in meters</label><input id="cMeters" inputmode="numeric" value="${esc(k.meters)}" placeholder="4500"></div>
+      </div>
+      <div class="field"><span class="label">Gender (for rating)</span><div class="seg"><button data-act="cgender" data-v="m" aria-pressed="${k.gender==="m"}">Boys</button><button data-act="cgender" data-v="f" aria-pressed="${k.gender==="f"}">Girls</button></div></div>
+    </div>
+    <div id="calcOut" class="stack"></div>
+  </div>`;
+}
+function renderCalcOut(){
+  const k=U.calc, out=$("#calcOut"); if(!out) return;
+  const km = k.dist==="custom" ? (+k.meters||0)/1000 : DMAP[k.dist].km, sec=parseTime(k.time);
+  if(!km||!isFinite(sec)||sec<=0){out.innerHTML=`<div class="card empty"><p>Enter a race time like <span class="num">17:45</span> or <span class="num">1745</span> to see the rating, training paces and equivalent times.</p></div>`;return}
+  const c=Tin.base(km,sec,k.gender), per=sec/km;
+  const cols=[["Mile",1609.344],["1600",1600],["1000",1000],["800",800],["600",600],["500",500],["400",400],["300",300],["200",200],["100",100]];
+  out.innerHTML=`
+    <div class="card" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <div><div class="label">Rating</div><div class="ratingbig">${(c.rating*100).toFixed(1)}%</div></div>
+      <div class="small" style="flex:1;min-width:160px">100% is the estimated limit of human performance. Girls' ratings include the 11% gender adjustment.</div>
+      <button class="btn" data-act="saveCalc">${I.plus}Save to a runner</button>
+    </div>
+    <div class="label">Race splits at this pace</div>
+    <div class="list scrollx"><table class="t"><tr>${[["Mile",1.609344],["1600",1.6],["1K",1],["800",.8],["400",.4],["200",.2]].map(([l])=>`<th>${l}</th>`).join("")}</tr>
+      <tr>${[1.609344,1.6,1,.8,.4,.2].map(x=>`<td style="text-align:right">${fmt(per*x,1)}</td>`).join("")}</tr></table></div>
+    <div class="label">Training paces · flat ground</div>
+    <div class="list scrollx"><table class="t"><tr><th>Intensity</th>${cols.map(([l])=>`<th>${l}</th>`).join("")}</tr>
+      ${ZONES.map(z=>`<tr><td><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(${z.c});margin-right:6px"></span>${z.n}</td>${cols.map(([,m])=>{const p=Tin.zone(c.v,z,m);return `<td>${p?`${fmt(p[0],m<=400?1:0)}<span class="s">${fmt(p[1],m<=400?1:0)}</span>`:"–"}</td>`}).join("")}</tr>`).join("")}
+    </table></div>
+    <div class="label">Equivalent race times</div>
+    <div class="list"><div class="grid2">${EQUIV.map(([l,kk])=>{const t=Tin.equiv(kk,c.t3k);return `<div><div class="d">${l}</div><div class="t">${fmtEq(t)}</div><div class="p">${fmt(t/kk*1.609344)} /mi</div></div>`}).join("")}</div></div>`;
+}
+function distSelect(id,val){
+  const gs=[...new Set(DIST.map(d=>d.g))];
+  return `<select id="${id}">${gs.map(g=>`<optgroup label="${g}">${DIST.filter(d=>d.g===g).map(d=>`<option value="${d.k}" ${d.k===val?"selected":""}>${d.label}</option>`).join("")}</optgroup>`).join("")}</select>`;
+}
+
+/* ============ sheets ============ */
+let SH=null;
+function openSheet(s){
+  SH=s; const root=$("#sheetRoot");
+  root.innerHTML=`<div class="scrim" data-act="closeSheet"></div><div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div>${sheetHTML(s)}</div>`;
+  requestAnimationFrame(()=>{root.querySelector(".scrim").classList.add("on");root.querySelector(".sheet").classList.add("on")});
+  const f=root.querySelector("input:not([type=hidden]),select"); if(f&&s.type!=="copy") setTimeout(()=>f.focus({preventScroll:true}),260);
+}
+function closeSheet(){const root=$("#sheetRoot");const sh=root.querySelector(".sheet");if(!sh){SH=null;return}
+  sh.classList.remove("on");root.querySelector(".scrim").classList.remove("on");setTimeout(()=>{root.innerHTML="";SH=null},220)}
+function sheetHTML(s){
+  if(s.type==="athlete"){const a=s.a||{};const gs=groups();
+    return `<h2>${s.a?"Edit runner":"New runner"}</h2><form id="fAthlete" class="stack">
+      <div class="field"><label class="label" for="aName">Name</label><input id="aName" required value="${esc(a.name)}" placeholder="First and last name" autocomplete="off"></div>
+      <div class="fields">
+        <div class="field"><span class="label">Team</span><div class="seg"><button type="button" data-act="agender" data-v="f" aria-pressed="${(a.gender||s.g||"f")==="f"}">Girls</button><button type="button" data-act="agender" data-v="m" aria-pressed="${(a.gender||s.g||"f")==="m"}">Boys</button></div></div>
+        <div class="field"><label class="label" for="aGrade">Grade</label><input id="aGrade" inputmode="numeric" value="${esc(a.grade)}" placeholder="10"></div>
+        <div class="field full"><label class="label" for="aGroup">Training group</label><input id="aGroup" list="grpList" value="${esc(a.group)}" placeholder="Varsity, JV, Middle school…"><datalist id="grpList">${gs.map(g=>`<option value="${esc(g)}">`).join("")}</datalist></div>
+        <div class="field full"><label class="label" for="aNotes">Coach notes</label><textarea id="aNotes" placeholder="Injury history, goals, mileage…">${esc(a.notes)}</textarea></div>
+      </div>
+      <input type="hidden" id="aGender" value="${a.gender||s.g||"f"}">
+      <div class="actions"><button type="button" class="btn ghost" data-act="closeSheet">Cancel</button><button class="btn" type="submit">${s.a?"Save":"Add runner"}</button></div>
+      ${s.a?`<button type="button" class="btn danger block" data-act="askDelAthlete">Delete runner</button><div id="delBox"></div>`:""}
+    </form>`;}
+  if(s.type==="result"){const r=s.r||{}; const as=Object.values(S.athletes).sort((x,y)=>x.name.localeCompare(y.name));
+    return `<h2>${s.r?"Edit result":"Log result"}</h2><form id="fResult" class="stack">
+      ${s.pickAthlete?`<div class="field"><label class="label" for="rAthlete">Runner</label><select id="rAthlete" required>${as.length?as.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join(""):`<option value="">Add a runner first</option>`}</select></div>`:""}
+      <div class="field"><span class="label">Type</span><div class="seg" id="rKindSeg">${[["race","Race"],["tt","Time trial"]].map(([k,l])=>`<button type="button" data-act="rkind" data-v="${k}" aria-pressed="${(r.kind||"race")===k}">${l}</button>`).join("")}</div></div>
+      <input type="hidden" id="rKind" value="${r.kind||"race"}">
+      <div class="field"><label class="label" for="rMeet">Meet or course</label><input id="rMeet" value="${esc(r.meet)}" placeholder="Conference championships" autocomplete="off"></div>
+      <div class="fields">
+        <div class="field"><label class="label" for="rDate">Date</label><input id="rDate" type="date" value="${esc(r.date||today())}" required></div>
+        <div class="field"><label class="label" for="rDist">Distance</label>${distSelect("rDist",r.distKey||s.dist||"5k")}</div>
+        <div class="field full" id="rMetersWrap" ${(r.distKey||s.dist)==="custom"?"":"hidden"}><label class="label" for="rMeters">Distance in meters</label><input id="rMeters" inputmode="numeric" value="${esc(r.meters||s.meters||"")}" placeholder="4500"></div>
+        <div class="field"><label class="label" for="rTime">Time</label><input id="rTime" inputmode="decimal" required value="${esc(r.seconds?fmtRace(+r.seconds):(s.time||""))}" placeholder="17:45" autocomplete="off"></div>
+        <div class="field"><label class="label" for="rAdj">Course adj. (sec)</label><input id="rAdj" inputmode="decimal" value="${esc(r.adj||"")}" placeholder="-20"></div>
+        <div class="field full"><span class="hint">Course adjustment corrects for hills, mud or heat. Enter −20 if this course runs about 20 seconds slow; paces use the adjusted time.</span></div>
+        <div class="field full"><label class="label" for="rNotes">Notes</label><input id="rNotes" value="${esc(r.notes)}" placeholder="Went out too fast, muddy second mile" autocomplete="off"></div>
+      </div>
+      <label style="display:flex;gap:10px;align-items:center;font-weight:600"><input type="checkbox" id="rBasis" ${s.isBasis||!s.r?"checked":""} style="width:20px;height:20px;accent-color:var(--pine)"> Use for this runner's training paces</label>
+      <p class="hint" id="rErr" style="color:var(--bad);margin:0" hidden></p>
+      <div class="actions"><button type="button" class="btn ghost" data-act="closeSheet">Cancel</button><button class="btn" type="submit">${s.r?"Save":"Log result"}</button></div>
+      ${s.r?`<button type="button" class="btn danger block" data-act="askDelResult">Delete entry</button><div id="delBox"></div>`:""}
+    </form>`;}
+  if(s.type==="settings"){const na=Object.keys(S.athletes).length, nr=Object.keys(S.results).length;
+    return `<h2>Team & backup</h2><form id="fSettings" class="stack">
+      <div class="field"><label class="label" for="sTeam">Team name</label><input id="sTeam" value="${esc(SET.team)}" placeholder="Team Ledger" autocomplete="off"></div>
+      <button class="btn" type="submit">Save name</button>
+    </form>
+    <div class="stack" style="margin-top:22px">
+      <div class="label">Backup</div>
+      <p class="small" style="margin:0">Everything is stored on this phone: ${na} runner${na===1?"":"s"}, ${nr} result${nr===1?"":"s"}. A backup file can be saved to Files, AirDropped or emailed, and restored on any phone.${SET.lastBackup?` Last backup: ${new Date(SET.lastBackup).toLocaleDateString()}.`:""}</p>
+      <button class="btn ghost block" data-act="exportData">Save a backup file</button>
+      <label class="btn ghost block" for="importFile">Restore from a backup file</label>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+      <div id="importBox"></div>
+    </div>
+    <div class="actions"><button class="btn ghost" data-act="closeSheet">Done</button></div>`;}
+  if(s.type==="copy") return `<h2>Copy text</h2><p class="small">Copying isn't allowed here. Select the text below and copy it.</p><textarea id="copyArea" style="width:100%;min-height:240px;border-radius:12px;border:1px solid var(--line);padding:12px;background:var(--surface);font:13px/1.5 var(--f-num)" readonly>${esc(s.text)}</textarea><div class="actions"><button class="btn" data-act="closeSheet">Done</button></div>`;
+  return "";
+}
+
+/* ============ events ============ */
+document.addEventListener("click",e=>{
+  const t=e.target.closest("[data-act]"); if(!t) return;
+  const act=t.dataset.act, v=t.dataset.v;
+  switch(act){
+    case "tab": U.view=v; U.athlete=null; render(); scrollTo(0,0); break;
+    case "open": U.athlete=t.dataset.id; U.atab="paces"; render(); scrollTo(0,0); break;
+    case "back": U.athlete=null; render(); break;
+    case "grp": U.grp=v; render(); break;
+    case "gender": U.gender=v; render(); break;
+    case "sort": U.sort=v; saveUI(); render(); break;
+    case "atab": U.atab=v; render(); break;
+    case "rep": U.rep=+v; saveUI(); render(); break;
+    case "wzone": U.wo.zone=+v; if(ZONES[+v].maxM&&U.wo.rep>ZONES[+v].maxM) U.wo.rep=ZONES[+v].maxM>=400?400:ZONES[+v].maxM; saveUI(); render(); break;
+    case "wrep": U.wo.rep=+v; saveUI(); render(); break;
+    case "wgrp": U.wo.grp=v; saveUI(); render(); break;
+    case "wgender": U.wo.gender=v; saveUI(); render(); break;
+    case "cgender": U.calc.gender=v; render(); break;
+    case "addAthlete": openSheet({type:"athlete"}); break;
+    case "editAthlete": openSheet({type:"athlete",a:S.athletes[t.dataset.id]}); break;
+    case "addResult": openSheet({type:"result",aid:U.athlete}); break;
+    case "editResult": {const r=S.results[t.dataset.id]; const a=S.athletes[r.athleteId]; openSheet({type:"result",r,aid:r.athleteId,isBasis:basisOf(a)?.id===r.id}); break;}
+    case "saveCalc": {const k=U.calc; if(!Object.keys(S.athletes).length){toast("Add a runner on the Roster tab first");break}
+      openSheet({type:"result",pickAthlete:true,dist:k.dist,meters:k.meters,time:k.time}); break;}
+    case "closeSheet": closeSheet(); break;
+    case "agender": $("#aGender").value=v; t.parentElement.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",b===t)); break;
+    case "rkind": $("#rKind").value=v; t.parentElement.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",b===t)); break;
+    case "askDelAthlete": $("#delBox").innerHTML=`<div class="confirm">Delete ${esc(SH.a.name)} and all ${resultsFor(SH.a.id).length} ledger entries? This can't be undone.<div class="actions" style="margin:0"><button type="button" class="btn ghost" data-act="closeSheet">Keep</button><button type="button" class="btn" style="background:var(--bad)" data-act="delAthlete">Delete</button></div></div>`; break;
+    case "delAthlete": {const id=SH.a.id; resultsFor(id).forEach(r=>del("results",r.id)); del("athletes",id); U.athlete=null; closeSheet(); render(); toast("Runner deleted"); break;}
+    case "askDelResult": $("#delBox").innerHTML=`<div class="confirm">Delete this entry?<div class="actions" style="margin:0"><button type="button" class="btn ghost" data-act="closeSheet">Keep</button><button type="button" class="btn" style="background:var(--bad)" data-act="delResult">Delete</button></div></div>`; break;
+    case "delResult": {const r=SH.r; del("results",r.id); const a=S.athletes[r.athleteId]; if(a&&a.basisId===r.id) put("athletes",a.id,{...a,basisId:null}); closeSheet(); render(); toast("Entry deleted"); break;}
+    case "copyPaces": copyText(pacesText(S.athletes[U.athlete])); break;
+    case "copyWorkout": copyText(workoutText()); break;
+    case "seed": seed(); break;
+    case "settings": openSheet({type:"settings"}); break;
+    case "exportData": exportData(); break;
+    case "doImport": {const d=SH&&SH.pending; if(!d) break; S.athletes=d.athletes; S.results=d.results; lsSave(); U.athlete=null; closeSheet(); render(); toast("Backup restored"); break;}
+    case "unseed": Object.values(S.athletes).filter(a=>a.sample).forEach(a=>{resultsFor(a.id).forEach(r=>del("results",r.id));del("athletes",a.id)}); render(); toast("Sample runners removed"); break;
+  }
+});
+document.addEventListener("input",e=>{
+  const id=e.target.id;
+  if(id==="q"){U.q=e.target.value;render()}
+  if(id==="cTime"){U.calc.time=e.target.value;renderCalcOut()}
+  if(id==="cMeters"){U.calc.meters=e.target.value;renderCalcOut()}
+});
+document.addEventListener("change",e=>{
+  const id=e.target.id;
+  if(id==="cDist"){U.calc.dist=e.target.value;$("#cMetersWrap").hidden=e.target.value!=="custom";renderCalcOut()}
+  if(id==="rDist"){$("#rMetersWrap").hidden=e.target.value!=="custom"}
+  if(id==="importFile"&&e.target.files[0]) readImport(e.target.files[0]);
+});
+document.addEventListener("submit",async e=>{
+  e.preventDefault();
+  if(e.target.id==="fSettings"){SET.team=$("#sTeam").value.trim();saveSet();render();toast("Team name saved");return}
+  if(e.target.id==="fAthlete"){
+    const name=$("#aName").value.trim(); if(!name) return;
+    const base=SH.a||{created:Date.now()}; const id=SH.a?.id||uid();
+    const a={...base,name,gender:$("#aGender").value,grade:$("#aGrade").value.trim(),group:$("#aGroup").value.trim(),notes:$("#aNotes").value.trim()};
+    delete a.id; closeSheet(); await put("athletes",id,a);
+    if(!base.name){U.athlete=id;U.atab="ledger";render();scrollTo(0,0)}
+    toast(base.name?"Runner saved":"Runner added");
+  }
+  if(e.target.id==="fResult"){
+    const err=$("#rErr"); const aid=SH.pickAthlete?$("#rAthlete").value:SH.aid;
+    const distKey=$("#rDist").value, meters=distKey==="custom"?Math.round(+$("#rMeters").value):null;
+    const sec=parseTime($("#rTime").value), adj=$("#rAdj").value.trim()?parseFloat($("#rAdj").value):0;
+    const fail=m=>{err.textContent=m;err.hidden=false};
+    if(!aid||!S.athletes[aid]) return fail("Choose a runner.");
+    if(distKey==="custom"&&!(meters>=100)) return fail("Enter the distance in meters, 100 or more.");
+    if(!isFinite(sec)||sec<=0) return fail("Enter the time as mm:ss, like 17:45 or 17:45.3.");
+    if(isNaN(adj)) return fail("Course adjustment must be a number of seconds, like -20.");
+    const id=SH.r?.id||uid();
+    const r={...(SH.r||{created:Date.now()}),athleteId:aid,kind:$("#rKind").value,meet:$("#rMeet").value.trim(),date:$("#rDate").value||today(),distKey,meters,seconds:sec,adj,notes:$("#rNotes").value.trim()};
+    delete r.id; const wantBasis=$("#rBasis").checked, a=S.athletes[aid], wasNew=!SH.r, picked=!!SH.pickAthlete;
+    closeSheet(); await put("results",id,r);
+    if(wantBasis&&a.basisId!==id) await put("athletes",aid,{...a,basisId:id});
+    else if(!wantBasis&&a.basisId===id) await put("athletes",aid,{...a,basisId:null});
+    if(picked){U.athlete=aid;U.atab="ledger";render();scrollTo(0,0)}
+    toast(wasNew?"Result logged":"Result saved");
+  }
+});
+addEventListener("scroll",()=>{const h=document.querySelector(".top");if(h)h.classList.toggle("scrolled",scrollY>4)},{passive:true});
+addEventListener("keydown",e=>{if(e.key==="Escape"&&SH)closeSheet()});
+
+/* ============ text exports ============ */
+function pacesText(a){
+  const c=athleteCalc(a); if(!c) return "";
+  const lines=[`${a.name} — training paces`,`From ${distLabel(c.basis)} ${fmtRace(+c.basis.seconds)} (${fmtDate(c.basis.date)}) · rating ${(c.rating*100).toFixed(1)}%`,""];
+  ZONES.forEach(z=>{const mi=Tin.zone(c.v,z,1609.344),r=Tin.zone(c.v,z,U.rep);
+    lines.push(`${z.n}: ${mi?fmt(mi[0])+"–"+fmt(mi[1])+" /mi":""}${r?`${mi?" · ":""}${repLabel(U.rep)} ${fmtRange(r)}`:""}`)});
+  return lines.join("\n");
+}
+function workoutText(){
+  const w=U.wo,z=ZONES[w.zone];
+  const rows=Object.values(S.athletes).filter(a=>(w.grp==="All"||a.group===w.grp)&&(w.gender==="all"||a.gender===w.gender)).map(a=>({a,c:athleteCalc(a)})).sort((x,y)=>(y.c?.rating||0)-(x.c?.rating||0));
+  return [`${repLabel(w.rep)} @ ${z.n}${w.grp!=="All"?` · ${w.grp}`:""}`,""].concat(rows.map(({a,c})=>{const p=c?Tin.zone(c.v,z,w.rep):null;return `${a.name}: ${p?fmtRange(p):"no result yet"}`})).join("\n");
+}
+
+/* ============ backup ============ */
+async function exportData(){
+  const stamp=today(), name=`xc-ledger-backup-${stamp}.json`;
+  const json=JSON.stringify({app:"xc-ledger",version:1,exported:new Date().toISOString(),team:SET.team,athletes:S.athletes,results:S.results},null,1);
+  const file=new File([json],name,{type:"application/json"});
+  try{
+    if(navigator.canShare&&navigator.canShare({files:[file]})){ await navigator.share({files:[file],title:"XC Ledger backup"}); }
+    else{ const a=document.createElement("a"); a.href=URL.createObjectURL(file); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000); }
+    SET.lastBackup=Date.now(); saveSet(); toast("Backup ready"); render();
+  }catch(err){ if(err&&err.name!=="AbortError") toast("Couldn't create the backup file."); }
+}
+function readImport(f){
+  const box=$("#importBox"); const r=new FileReader();
+  r.onload=()=>{
+    let d; try{d=JSON.parse(r.result)}catch{d=null}
+    if(!d||d.app!=="xc-ledger"||typeof d.athletes!=="object"||typeof d.results!=="object"){box.innerHTML=`<div class="confirm" style="color:var(--bad)">That file isn't an XC Ledger backup.</div>`;return}
+    SH.pending=d; const na=Object.keys(d.athletes).length, nr=Object.keys(d.results).length;
+    box.innerHTML=`<div class="confirm">Replace everything on this phone with the backup from ${esc(new Date(d.exported).toLocaleDateString())} (${na} runners, ${nr} results)?<div class="actions" style="margin:0"><button type="button" class="btn ghost" data-act="closeSheet">Cancel</button><button type="button" class="btn" data-act="doImport">Restore</button></div></div>`;
+    if(d.team&&!SET.team){SET.team=d.team;saveSet()}
+  };
+  r.readAsText(f);
+}
+
+/* ============ sample runners (clearly marked, removable) ============ */
+async function seed(){
+  const d=(n)=>{const x=new Date();x.setDate(x.getDate()-n);return x.toISOString().slice(0,10)};
+  const people=[
+    ["Sample · Maya Ortiz","f","11","Varsity",[[42,"tt","Summer time trial","2mi",12*60+58],[24,"race","Season opener","5k",20*60+41],[10,"race","Invitational","5k",20*60+5]]],
+    ["Sample · Jordan Lee","m","12","Varsity",[[38,"tt","Summer time trial","3200m",10*60+42],[24,"race","Season opener","5k",17*60+22],[10,"race","Invitational","5k",16*60+58]]],
+    ["Sample · Priya Shah","f","9","JV",[[24,"race","Season opener","5k",23*60+50],[10,"race","Invitational","5k",23*60+12]]],
+    ["Sample · Eli Brooks","m","10","JV",[[30,"tt","Mile time trial","1mi",5*60+21],[17,"race","Dual meet","3mi",17*60+55]]]
+  ];
+  for(const [name,g,grade,group,rs] of people){
+    const aid=uid(); let last=null;
+    await put("athletes",aid,{name,gender:g,grade,group,notes:"",sample:true,created:Date.now()});
+    for(const [ago,kind,meet,dk,sec] of rs){const rid=uid();last=rid;await put("results",rid,{athleteId:aid,kind,meet,date:d(ago),distKey:dk,meters:null,seconds:sec,adj:0,notes:"",sample:true,created:Date.now()})}
+  }
+  toast("Added 4 sample runners");
+}
+
+render();
+initStore();
+if("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script>
+</body>
+</html>
