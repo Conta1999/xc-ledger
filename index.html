@@ -69,6 +69,16 @@ button{cursor:pointer}
 .btn.ghost{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
 .btn.danger{background:transparent;color:var(--bad);border:1px solid var(--line)}
 .btn.block{width:100%}
+.btn:disabled{opacity:.45;cursor:default}
+.pscta{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px;box-shadow:var(--shadow)}
+.pscta .ico{width:40px;height:40px;border-radius:10px;background:var(--pine-soft);color:var(--pine);display:grid;place-items:center}
+.pscta .ico svg{width:22px;height:22px}
+.pscta b{font-weight:700}
+.pscol{display:grid;grid-template-columns:minmax(0,1fr) 104px 40px;gap:8px;align-items:center}
+.pscol select{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px;font-size:16px;min-width:0;width:100%}
+.iconbtn:disabled{opacity:.35;cursor:default}
+.psprev{display:flex;flex-direction:column;gap:10px}
+.psprev img{width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff;display:block}
 .btn svg{width:18px;height:18px}
 .wrap{padding:0 16px}
 .stack{display:flex;flex-direction:column;gap:12px}
@@ -287,9 +297,9 @@ const distKm = r => r.distKey==="custom" ? (+r.meters||0)/1000 : DMAP[r.distKey]
 const repLabel = m => (REPS.find(r=>Math.abs(r[0]-m)<.5)||[m,m+"m"])[1];
 
 function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("on");clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove("on"),2000)}
-async function copyText(text){
+async function copyText(text,fallback){
   try{await navigator.clipboard.writeText(text);toast("Copied to clipboard");}
-  catch{openSheet({type:"copy",text});}
+  catch{ fallback ? fallback(text) : openSheet({type:"copy",text}); }
 }
 
 /* ============ store: shared db when available, this device otherwise ============ */
@@ -333,11 +343,15 @@ function prIds(rs){
 function groups(){return [...new Set(Object.values(S.athletes).map(a=>a.group).filter(Boolean))].sort()}
 
 /* ============ UI state ============ */
+// Team pace sheet: default columns match the coach's own sheet (Mile Threshold, 800m VO2 Max, fast end of each range)
+const PS_DEF = {title:"", cols:[{z:4,m:1609.344},{z:7,m:800}], end:"fast", grp:"All", gender:"all", sort:"fast", per:30};
 const U = {view:"roster", athlete:null, q:"", grp:"All", gender:"all", sort:"rating", atab:"paces", rep:400,
   wo:{zone:5, rep:1000, grp:"All", gender:"all"},
   calc:{dist:"5k", meters:"", time:"", gender:"m"}};
-try{const s=JSON.parse(localStorage.getItem("xc-ledger-ui")||"{}");if(s.wo)Object.assign(U.wo,s.wo);if(s.rep)U.rep=s.rep;if(s.sort)U.sort=s.sort}catch{}
-function saveUI(){try{localStorage.setItem("xc-ledger-ui",JSON.stringify({wo:U.wo,rep:U.rep,sort:U.sort}))}catch{}}
+try{const s=JSON.parse(localStorage.getItem("xc-ledger-ui")||"{}");if(s.wo)Object.assign(U.wo,s.wo);if(s.rep)U.rep=s.rep;if(s.sort)U.sort=s.sort;
+  if(s.ps&&Array.isArray(s.ps.cols)){const cols=s.ps.cols.filter(c=>ZONES[c?.z]&&REPS.some(r=>Math.abs(r[0]-c.m)<.5)).slice(0,4);U.ps={...JSON.parse(JSON.stringify(PS_DEF)),...s.ps,cols:cols.length?cols:JSON.parse(JSON.stringify(PS_DEF.cols))}}}catch{}
+if(!U.ps) U.ps=JSON.parse(JSON.stringify(PS_DEF));
+function saveUI(){try{localStorage.setItem("xc-ledger-ui",JSON.stringify({wo:U.wo,rep:U.rep,sort:U.sort,ps:U.ps}))}catch{}}
 
 const I = {
   roster:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c.6-3.4 3-5.4 6-5.4s5.4 2 6 5.4"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14.2c2.4.2 4 1.9 4.5 4.8"/></svg>',
@@ -348,6 +362,8 @@ const I = {
   edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4"/></svg>',
   copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
   gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  share:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7.5 7.5L12 3l4.5 4.5"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg>',
+  sheet:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M3.5 8.5h17M9.5 8.5v12M3.5 13.5h17M3.5 17h17"/></svg>',
   search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>'
 };
 
@@ -474,6 +490,7 @@ function viewAthlete(a){
 }
 
 function viewWorkout(){
+  if(U.wo.grp!=="All"&&!groups().includes(U.wo.grp)) U.wo.grp="All";
   const w=U.wo, z=ZONES[w.zone];
   const all=Object.values(S.athletes).filter(a=>(w.grp==="All"||a.group===w.grp)&&(w.gender==="all"||a.gender===w.gender));
   const rows=all.map(a=>({a,c:athleteCalc(a)})).sort((x,y)=>(y.c?.rating||0)-(x.c?.rating||0)||x.a.name.localeCompare(y.a.name));
@@ -482,6 +499,9 @@ function viewWorkout(){
   return `<header class="top"><div style="flex:1;min-width:0"><div class="sub">Today's session</div><h1>Workout Splits</h1></div>
     <button class="iconbtn" data-act="copyWorkout" aria-label="Copy split sheet">${I.copy}</button></header>
   <div class="wrap stack">
+    <button class="pscta" data-act="openPaceSheet"><span class="ico">${I.sheet}</span>
+      <span style="min-width:0"><b>Team pace sheet</b><span class="small" style="display:block">An image of every runner's target paces, fastest first, to text the team.</span></span>
+      <span aria-hidden="true" style="color:var(--muted);font-size:22px">›</span></button>
     <div class="label">Intensity</div>
     <div class="chips">${ZONES.map((zz,i)=>`<button class="chip" data-act="wzone" data-v="${i}" aria-pressed="${w.zone===i}" style="${w.zone===i?"":`border-color:color-mix(in srgb,var(${zz.c}) 45%,var(--line))`}">${zz.n}</button>`).join("")}</div>
     <div class="label">Rep distance</div>
@@ -546,12 +566,13 @@ function distSelect(id,val){
 /* ============ sheets ============ */
 let SH=null;
 function openSheet(s){
-  SH=s; const root=$("#sheetRoot");
+  psGen++; psClear(); SH=s; const root=$("#sheetRoot");
   root.innerHTML=`<div class="scrim" data-act="closeSheet"></div><div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div>${sheetHTML(s)}</div>`;
   requestAnimationFrame(()=>{root.querySelector(".scrim").classList.add("on");root.querySelector(".sheet").classList.add("on")});
-  const f=root.querySelector("input:not([type=hidden]),select"); if(f&&s.type!=="copy") setTimeout(()=>f.focus({preventScroll:true}),260);
+  const f=root.querySelector("input:not([type=hidden]),select"); if(f&&!["copy","pacesheet","settings"].includes(s.type)) setTimeout(()=>f.focus({preventScroll:true}),260);
 }
-function closeSheet(){const root=$("#sheetRoot");const sh=root.querySelector(".sheet");if(!sh){SH=null;return}
+function rerenderSheet(){const sh=document.querySelector("#sheetRoot .sheet");if(!sh||!SH) return;const st=sh.scrollTop;sh.innerHTML='<div class="grab"></div>'+sheetHTML(SH);sh.scrollTop=st}
+function closeSheet(){psGen++;psClear();const root=$("#sheetRoot");const sh=root.querySelector(".sheet");if(!sh){SH=null;return}
   sh.classList.remove("on");root.querySelector(".scrim").classList.remove("on");setTimeout(()=>{root.innerHTML="";SH=null},220)}
 function sheetHTML(s){
   if(s.type==="athlete"){const a=s.a||{};const gs=groups();
@@ -601,6 +622,34 @@ function sheetHTML(s){
       <div id="importBox"></div>
     </div>
     <div class="actions"><button class="btn ghost" data-act="closeSheet">Done</button></div>`;}
+  if(s.type==="pacesheet"){const cfg=U.ps, gs=groups(), {rows,missing}=psRows(cfg);
+    const seg=(act,cur,opts)=>`<div class="seg">${opts.map(([k,l])=>`<button type="button" data-act="${act}" data-v="${k}" aria-pressed="${String(cur)===String(k)}">${l}</button>`).join("")}</div>`;
+    return `<h2>Team pace sheet</h2>
+    <p class="small" style="margin:-6px 0 14px">Makes an image of every runner's paces, fastest first, ready to text the team.</p>
+    <div class="stack">
+      <div class="label">Columns</div>
+      ${cfg.cols.map((c,i)=>{const z=ZONES[c.z], bad=z.maxM&&c.m>z.maxM+.5; return `<div class="pscol">
+        <select id="psZ${i}" aria-label="Column ${i+1} intensity">${ZONES.map((zz,k)=>`<option value="${k}" ${k===c.z?"selected":""}>${zz.n}</option>`).join("")}</select>
+        <select id="psD${i}" aria-label="Column ${i+1} rep distance">${REPS.map(([m])=>`<option value="${m}" ${Math.abs(m-c.m)<.5?"selected":""}>${expDist(m)}</option>`).join("")}</select>
+        <button type="button" class="iconbtn" data-act="psDel" data-i="${i}" aria-label="Remove column ${i+1}" ${cfg.cols.length<2?"disabled":""}>✕</button>
+        ${bad?`<div class="small" style="grid-column:1/-1;color:var(--bad)">${z.n} only covers reps of ${z.maxM}m or less, so this column will show a dash. Pick a shorter distance.</div>`:""}
+      </div>`}).join("")}
+      ${cfg.cols.length<4?`<button type="button" class="btn ghost" data-act="psAdd">${I.plus}Add column</button>`:""}
+      <div class="field"><span class="label">Time shown</span>${seg("psEnd",cfg.end,[["fast","Target"],["mid","Middle"],["slow","Slow end"],["range","Range"]])}
+        <span class="hint">${{fast:"Target is the fast end of each Tinman range.",mid:"Middle is halfway between the slow and fast ends of each Tinman range.",slow:"Slow end is the easiest time in each Tinman range.",range:"Range shows the slow and fast ends, like the Workout tab."}[cfg.end]}</span></div>
+      <div class="field"><span class="label">Runners</span>
+        <div class="chips">${["All",...gs].map(g=>`<button type="button" class="chip" data-act="psGrp" data-v="${esc(g)}" aria-pressed="${cfg.grp===g}">${esc(g==="All"?"All groups":g)}</button>`).join("")}</div>
+        ${seg("psGender",cfg.gender,[["all","Everyone"],["f","Girls"],["m","Boys"]])}</div>
+      <div class="fields">
+        <div class="field"><span class="label">Order</span>${seg("psSort",cfg.sort,[["fast","Fastest first"],["name","A–Z"]])}</div>
+        <div class="field"><span class="label">Images</span>${seg("psPer",cfg.per,[[30,"Pages of 30"],[0,"One image"]])}</div>
+      </div>
+      <div class="field"><label class="label" for="psTitle">Title</label><input id="psTitle" value="${esc(cfg.title)}" placeholder="${esc(psAutoTitle(cfg))}" autocomplete="off"><span class="hint">Leave blank to use the column names.</span></div>
+      <p class="small" style="margin:0">${rows.length} runner${rows.length===1?"":"s"} on this sheet${missing?` · ${missing} without a result left off`:""}</p>
+      <button type="button" class="btn block" data-act="psMake" ${rows.length?"":"disabled"}>${I.sheet}Create image</button>
+      <div id="psOut" class="stack">${s.imgs?psPreviewHTML(s.imgs):""}</div>
+    </div>
+    <div class="actions"><button type="button" class="btn ghost" data-act="closeSheet">Done</button></div>`;}
   if(s.type==="copy") return `<h2>Copy text</h2><p class="small">Copying isn't allowed here. Select the text below and copy it.</p><textarea id="copyArea" style="width:100%;min-height:240px;border-radius:12px;border:1px solid var(--line);padding:12px;background:var(--surface);font:13px/1.5 var(--f-num)" readonly>${esc(s.text)}</textarea><div class="actions"><button class="btn" data-act="closeSheet">Done</button></div>`;
   return "";
 }
@@ -638,6 +687,19 @@ document.addEventListener("click",e=>{
     case "delResult": {const r=SH.r; del("results",r.id); const a=S.athletes[r.athleteId]; if(a&&a.basisId===r.id) put("athletes",a.id,{...a,basisId:null}); closeSheet(); render(); toast("Entry deleted"); break;}
     case "copyPaces": copyText(pacesText(S.athletes[U.athlete])); break;
     case "copyWorkout": copyText(workoutText()); break;
+    case "openPaceSheet": if(U.ps.grp!=="All"&&!groups().includes(U.ps.grp)){U.ps.grp="All";saveUI()} openSheet({type:"pacesheet"}); break;
+    case "psAdd": if(U.ps.cols.length<4) U.ps.cols.push({z:5,m:1000}); psChanged(); break;
+    case "psDel": if(U.ps.cols.length>1) U.ps.cols.splice(+t.dataset.i,1); psChanged(); break;
+    case "psEnd": U.ps.end=v; psChanged(); break;
+    case "psGrp": U.ps.grp=v; psChanged(); break;
+    case "psGender": U.ps.gender=v; psChanged(); break;
+    case "psSort": U.ps.sort=v; psChanged(); break;
+    case "psPer": U.ps.per=+v; psChanged(); break;
+    case "psMake": psMake(); break;
+    case "psShare": psShare(); break;
+    case "psCopy": copyText(psText(U.ps),txt=>{const o=$("#psOut");if(!o)return;o.querySelector(".pscopy")?.remove();
+      o.insertAdjacentHTML("beforeend",`<div class="pscopy stack"><p class="small" style="margin:0">Copying isn't allowed here. Select the text below and copy it.</p><textarea readonly style="width:100%;min-height:200px;border-radius:12px;border:1px solid var(--line);padding:12px;background:var(--surface);font:13px/1.5 var(--f-num)">${esc(txt)}</textarea></div>`);
+      const ta=o.querySelector(".pscopy textarea");ta.focus();ta.select();}); break;
     case "seed": seed(); break;
     case "settings": openSheet({type:"settings"}); break;
     case "exportData": exportData(); break;
@@ -648,6 +710,7 @@ document.addEventListener("click",e=>{
 document.addEventListener("input",e=>{
   const id=e.target.id;
   if(id==="q"){U.q=e.target.value;render()}
+  if(id==="psTitle"){U.ps.title=e.target.value;psGen++;saveUI();psResetMakeBtn();if(SH?.imgs){psClear();const o=$("#psOut");if(o)o.innerHTML=""}}
   if(id==="cTime"){U.calc.time=e.target.value;renderCalcOut()}
   if(id==="cMeters"){U.calc.meters=e.target.value;renderCalcOut()}
 });
@@ -655,6 +718,8 @@ document.addEventListener("change",e=>{
   const id=e.target.id;
   if(id==="cDist"){U.calc.dist=e.target.value;$("#cMetersWrap").hidden=e.target.value!=="custom";renderCalcOut()}
   if(id==="rDist"){$("#rMetersWrap").hidden=e.target.value!=="custom"}
+  const pm=/^ps([ZD])(\d)$/.exec(id||"");
+  if(pm&&U.ps.cols[+pm[2]]){const col=U.ps.cols[+pm[2]]; if(pm[1]==="Z") col.z=+e.target.value; else col.m=+e.target.value; psChanged();}
   if(id==="importFile"&&e.target.files[0]) readImport(e.target.files[0]);
 });
 document.addEventListener("submit",async e=>{
@@ -689,6 +754,150 @@ document.addEventListener("submit",async e=>{
 });
 addEventListener("scroll",()=>{const h=document.querySelector(".top");if(h)h.classList.toggle("scrolled",scrollY>4)},{passive:true});
 addEventListener("keydown",e=>{if(e.key==="Escape"&&SH)closeSheet()});
+
+/* ============ team pace sheet (image export) ============ */
+const expDist = m => Math.abs(m-1609.344)<.5 ? "Mile" : `${m}m`;
+const expZone = z => z.n.replace(/\b\w/g,c=>c.toUpperCase());
+const colHead = c => `${expDist(c.m)} ${expZone(ZONES[c.z])}`;
+const psAutoTitle = cfg => cfg.cols.map(c=>colHead(c)+" Pace").join(" / ");
+// Hundredths cut off like Final Surge, always two decimals like the coach's sheet ("5:50.00")
+function fmt2(s){
+  if(!isFinite(s)) return "–";
+  const cs=Math.floor(s*100), h=Math.floor(cs/360000), m=Math.floor(cs%360000/6000), sec=Math.floor(cs%6000/100), f=String(cs%100).padStart(2,"0");
+  return h ? `${h}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}.${f}` : m ? `${m}:${String(sec).padStart(2,"0")}.${f}` : `${sec}.${f}`;
+}
+function psCell(c,col,end){
+  const p=Tin.zone(c.v,ZONES[col.z],col.m); if(!p) return "–";
+  return end==="slow"?fmt2(p[0]) : end==="mid"?fmt2((p[0]+p[1])/2) : end==="range"?`${fmt2(p[0])}–${fmt2(p[1])}` : fmt2(p[1]);
+}
+function psRows(cfg){
+  const pool=Object.values(S.athletes).filter(a=>(cfg.grp==="All"||a.group===cfg.grp)&&(cfg.gender==="all"||a.gender===cfg.gender));
+  const rows=pool.map(a=>({a,c:athleteCalc(a)})).filter(r=>r.c&&isFinite(r.c.v));
+  rows.sort((x,y)=>cfg.sort==="name" ? x.a.name.localeCompare(y.a.name) : (x.c.v-y.c.v)||x.a.name.localeCompare(y.a.name));
+  return {rows, missing:pool.length-rows.length};
+}
+function psSubtitle(cfg,page,pages){
+  const team=(typeof SET!=="undefined"&&SET.team)||"";
+  const d=new Date().toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});
+  const note={mid:"Middle of Tinman range",slow:"Slow end of Tinman range",range:"Tinman range, slow–fast"}[cfg.end]||"";
+  return [team, cfg.grp!=="All"?cfg.grp:"", {f:"Girls",m:"Boys"}[cfg.gender]||"", note, d, pages>1?`Page ${page+1} of ${pages}`:""].filter(Boolean).join("  ·  ");
+}
+const PS_FONT='"Helvetica Neue",Helvetica,Arial,sans-serif';
+function psLayout(cfg,rows){
+  const ctx=document.createElement("canvas").getContext("2d"), PAD=48, MINW=1300;
+  const heads=cfg.cols.map(colHead);
+  ctx.font=`400 28px ${PS_FONT}`;
+  const colW=cfg.cols.map(col=>Math.max(220,...rows.map(r=>ctx.measureText(psCell(r.c,col,cfg.end)).width+56)));
+  ctx.font=`700 26px ${PS_FONT}`;
+  const headLines=heads.map((h,i)=>{
+    const hw=Math.ceil(ctx.measureText(h).width+36);
+    if(hw<=Math.max(colW[i],284)){ colW[i]=Math.max(colW[i],hw); return [h]; }
+    const col=cfg.cols[i], lines=[expDist(col.m), expZone(ZONES[col.z])];
+    colW[i]=Math.max(colW[i],...lines.map(l=>ctx.measureText(l).width+36)); return lines;
+  });
+  ctx.font=`700 28px ${PS_FONT}`;
+  let nameW=Math.min(560,Math.max(320,...rows.map(r=>ctx.measureText(r.a.name).width+48)));
+  let extra=MINW-PAD*2-nameW-colW.reduce((x,y)=>x+y,0);
+  for(let i=0;i<colW.length&&extra>0;i++){const add=Math.min(extra,Math.max(0,284-colW[i]));colW[i]+=add;extra-=add}
+  if(extra>0) nameW+=extra;
+  const W=PAD*2+nameW+colW.reduce((x,y)=>x+y,0);
+  return {PAD,W,nameW,colW,heads,headLines,headH:headLines.some(l=>l.length>1)?96:64,ROW:62};
+}
+function psFit(ctx,text,max){
+  if(ctx.measureText(text).width<=max) return text;
+  let t=text; while(t.length>1&&ctx.measureText(t+"…").width>max) t=t.slice(0,-1);
+  return t.trimEnd()+"…";
+}
+function psDrawPage(L,cfg,rows,page,pages){
+  const {PAD,W,nameW,colW,headLines,headH,ROW}=L;
+  const title=(cfg.title||"").trim()||psAutoTitle(cfg), sub=psSubtitle(cfg,page,pages);
+  const top=36, titleH=44, subH=sub?34:0, gap=24, tableY=top+titleH+subH+gap;
+  const H=tableY+headH+rows.length*ROW+48;
+  const cv=document.createElement("canvas"); cv.width=W; cv.height=H;
+  const ctx=cv.getContext("2d"); ctx.textBaseline="middle";
+  ctx.fillStyle="#FFFFFF"; ctx.fillRect(0,0,W,H);
+  // title + subtitle
+  let ts=34; ctx.font=`400 ${ts}px ${PS_FONT}`;
+  while(ts>20&&ctx.measureText(title).width>W-PAD*2){ts-=2;ctx.font=`400 ${ts}px ${PS_FONT}`}
+  ctx.fillStyle="#111111"; ctx.textAlign="center"; ctx.fillText(psFit(ctx,title,W-PAD*2),W/2,top+titleH/2);
+  if(sub){ctx.font=`400 21px ${PS_FONT}`;ctx.fillStyle="#666666";ctx.fillText(psFit(ctx,sub,W-PAD*2),W/2,top+titleH+subH/2)}
+  const xs=[PAD,PAD+nameW]; colW.forEach(w=>xs.push(xs[xs.length-1]+w));
+  const right=xs[xs.length-1];
+  // header row
+  ctx.fillStyle="#222222"; ctx.fillRect(PAD,tableY,right-PAD,headH);
+  ctx.fillStyle="#FFFFFF"; ctx.font=`700 26px ${PS_FONT}`;
+  ctx.textAlign="left"; ctx.fillText("Athlete",PAD+20,tableY+headH/2);
+  ctx.textAlign="center";
+  headLines.forEach((lines,i)=>{const cx=(xs[i+1]+xs[i+2])/2;
+    if(lines.length===1) ctx.fillText(psFit(ctx,lines[0],colW[i]-24),cx,tableY+headH/2);
+    else lines.forEach((l,k)=>ctx.fillText(psFit(ctx,l,colW[i]-24),cx,tableY+headH/2+(k?16:-16)));
+  });
+  // body rows
+  rows.forEach((r,i)=>{
+    const y=tableY+headH+i*ROW;
+    ctx.fillStyle=i%2?"#F4F4F4":"#FFFFFF"; ctx.fillRect(PAD,y,right-PAD,ROW);
+    ctx.fillStyle="#111111"; ctx.textAlign="left"; ctx.font=`700 28px ${PS_FONT}`;
+    ctx.fillText(psFit(ctx,r.a.name,nameW-40),PAD+20,y+ROW/2+1);
+    ctx.textAlign="center"; ctx.font=`400 28px ${PS_FONT}`;
+    cfg.cols.forEach((col,k)=>ctx.fillText(psFit(ctx,psCell(r.c,col,cfg.end),colW[k]-16),(xs[k+1]+xs[k+2])/2,y+ROW/2+1));
+  });
+  // grid lines
+  const bottom=tableY+headH+rows.length*ROW;
+  ctx.strokeStyle="#D0D0D0"; ctx.lineWidth=1.5;
+  for(let i=0;i<=rows.length;i++){const y=Math.round(tableY+headH+i*ROW)+.5;ctx.beginPath();ctx.moveTo(PAD,y);ctx.lineTo(right,y);ctx.stroke()}
+  xs.forEach((x,i)=>{ctx.strokeStyle=i===0||i===xs.length-1?"#D0D0D0":"#C8C8C8";ctx.beginPath();ctx.moveTo(Math.round(x)+.5,tableY+headH);ctx.lineTo(Math.round(x)+.5,bottom);ctx.stroke()});
+  ctx.strokeStyle="#555555"; xs.slice(1,-1).forEach(x=>{ctx.beginPath();ctx.moveTo(Math.round(x)+.5,tableY);ctx.lineTo(Math.round(x)+.5,tableY+headH);ctx.stroke()});
+  return cv;
+}
+function psClear(){ if(SH?.imgs){ SH.imgs.forEach(x=>{try{URL.revokeObjectURL(x.url)}catch{}}); SH.imgs=null; } }
+let psGen=0; // bumped whenever images being created would no longer match the builder
+function psChanged(){ psGen++; saveUI(); psClear(); rerenderSheet(); }
+function psPreviewHTML(imgs){
+  return `<div class="psprev">${imgs.map((x,i)=>`<img src="${x.url}" alt="Pace sheet${imgs.length>1?`, page ${i+1}`:""}">`).join("")}</div>
+    <div class="actions" style="margin-top:0"><button type="button" class="btn" data-act="psShare">${I.share}Share ${imgs.length>1?imgs.length+" images":"image"}</button><button type="button" class="btn ghost" data-act="psCopy">${I.copy}Copy as text</button></div>
+    <p class="hint" style="margin:0">Share opens your phone's share menu: Messages, AirDrop or Save Image. You can also press and hold an image to save it.</p>`;
+}
+async function psMake(){
+  if(!SH||SH.type!=="pacesheet") return;
+  const sh=SH, gen=++psGen, cfg=JSON.parse(JSON.stringify(U.ps)), {rows}=psRows(cfg);
+  if(!rows.length){toast("No runners with results to put on the sheet.");return}
+  const stale=()=>SH!==sh||gen!==psGen;
+  const btn=document.querySelector('[data-act="psMake"]'); if(btn){btn.disabled=true;btn.lastChild.textContent="Creating…"}
+  const L=psLayout(cfg,rows);
+  // iPhones on iOS 17 can't make a canvas over 4096×4096 pixels in area, so very long sheets split into pages
+  const cap=Math.max(1,Math.floor((Math.min(16777216/L.W,32767)-(138+L.headH+48))/L.ROW));
+  const want=cfg.per>0?cfg.per:rows.length, per=Math.min(want,cap), pages=Math.ceil(rows.length/per), size=Math.ceil(rows.length/pages);
+  const slug=((cfg.title||"").trim()||psAutoTitle(cfg)).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,60)||"pace-sheet";
+  const imgs=[];
+  try{
+    for(let p=0;p<pages;p++){
+      const cv=psDrawPage(L,cfg,rows.slice(p*size,(p+1)*size),p,pages);
+      const blob=await new Promise(res=>cv.toBlob(res,"image/png"));
+      if(!blob) throw new Error("toBlob");
+      const file=new File([blob],`${slug}${pages>1?`-${p+1}`:""}.png`,{type:"image/png"});
+      imgs.push({file,url:URL.createObjectURL(file)});
+    }
+  }catch{ imgs.forEach(x=>URL.revokeObjectURL(x.url)); if(!stale()){ psResetMakeBtn(); toast(pages>1?"Couldn't create the images. Try Pages of 30 with fewer runners.":"Couldn't create the image. Try Pages of 30."); } return }
+  if(stale()){ imgs.forEach(x=>URL.revokeObjectURL(x.url)); return }
+  psClear(); SH.imgs=imgs; psResetMakeBtn();
+  const out=$("#psOut"); if(out){ out.innerHTML=psPreviewHTML(imgs); out.scrollIntoView({block:"start",behavior:"smooth"}); }
+  if(want>cap) toast(`Too many runners for one image, so it was split into ${pages} pages.`);
+}
+function psResetMakeBtn(){const b=document.querySelector('[data-act="psMake"]');if(b){b.disabled=false;b.lastChild.textContent="Create image"}}
+async function psShare(){
+  const imgs=SH?.imgs; if(!imgs?.length) return;
+  const files=imgs.map(x=>x.file);
+  try{
+    if(navigator.canShare&&navigator.canShare({files})){ await navigator.share({files}); return; }
+  }catch(e){ if(e&&e.name==="AbortError") return; }
+  const urls=imgs.map(x=>({url:x.url,name:x.file.name}));
+  urls.forEach((u,i)=>setTimeout(()=>{try{const a=document.createElement("a");a.href=u.url;a.download=u.name;document.body.appendChild(a);a.click();a.remove()}catch{}},i*400));
+  toast(urls.length>1?"Saving images. If nothing downloads, press and hold each image.":"Saving image. If nothing downloads, press and hold the image.");
+}
+function psText(cfg){
+  const {rows}=psRows(cfg), heads=cfg.cols.map(colHead);
+  return [(cfg.title||"").trim()||psAutoTitle(cfg), psSubtitle(cfg,0,1), ""].concat(rows.map(({a,c})=>`${a.name}: `+cfg.cols.map((col,i)=>`${heads[i]} ${psCell(c,col,cfg.end)}`).join(" · "))).join("\n");
+}
 
 /* ============ text exports ============ */
 function pacesText(a){
