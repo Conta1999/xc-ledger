@@ -233,6 +233,20 @@ table.t td .s{display:block;color:var(--muted);font-size:11.5px}
 .prow .name{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .prow select{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:9px 8px;font-size:16px;min-width:0;width:100%;min-height:42px}
 .field textarea.ptext{min-height:150px;font-size:16px;white-space:pre;overflow-wrap:normal;overflow-x:auto}
+/* meet detail: team places with PR / SB / First, section stats */
+.mbtns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media (max-width:359px){.mbtns .btn svg{display:none}}
+.hero .stats.mstats{align-items:end}
+.mrow{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 14px 10px 10px;border:0;border-top:1px solid var(--line);background:none;width:100%;text-align:left}
+.mrow:first-child{border-top:0}
+.mrow .mpl{font:700 22px/1 var(--f-display);text-align:center;color:var(--muted)}
+.mrow .name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mrow .small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mrow .right{text-align:right}
+.mrow .right .small{margin-top:3px}
+.msum{padding:10px 14px;border-top:1px solid var(--line);background:var(--sunk);font-size:12.5px;color:var(--muted)}
+.pill.sb{background:var(--pine-soft);color:var(--pine)}
+.pill.first{background:transparent;color:var(--pine);box-shadow:inset 0 0 0 1px var(--pine)}
 
 /* sheet */
 .scrim{position:fixed;inset:0;background:rgba(10,16,13,.45);z-index:40;opacity:0;transition:opacity .2s}
@@ -517,8 +531,9 @@ const U = {view:"roster", athlete:null, q:"", grp:"All", gender:"all", sort:"rat
   wo:{zone:5, rep:1000, grp:"All", gender:"all", mode:"dist", sec:180, loop:""},
   rlast:null, // last logged result: distance, type, meet, date (prefills the next one)
   drafts:{}, ek:"new", // results entry drafts, in memory only: "new" or the key of the meet being edited
+  meet:null, rcPer:"all", // meet detail: the meet's key; recap images: "all" in one image or one per "sec"tion
   calc:{dist:"5k", meters:"", time:"", gender:"m"}};
-try{const s=JSON.parse(localStorage.getItem("xc-ledger-ui")||"{}");if(s.wo)Object.assign(U.wo,s.wo);if(s.rep)U.rep=s.rep;if(s.sort)U.sort=s.sort;
+try{const s=JSON.parse(localStorage.getItem("xc-ledger-ui")||"{}");if(s.wo)Object.assign(U.wo,s.wo);if(s.rep)U.rep=s.rep;if(s.sort)U.sort=s.sort;if(s.rcPer==="sec")U.rcPer="sec";
   if(s.ps&&Array.isArray(s.ps.cols)){const cols=s.ps.cols.filter(psColOK).map(c=>c.k==="race"?{k:"race",dk:c.dk,show:c.show}:c).slice(0,4);U.ps={...JSON.parse(JSON.stringify(PS_DEF)),...s.ps,cols:cols.length?cols:JSON.parse(JSON.stringify(PS_DEF.cols))}}
   const L=s.rlast; if(isObj(L)&&DMAP[L.dist]) U.rlast={dist:L.dist, meters:L.dist==="custom"&&+L.meters>0?+L.meters:"", kind:KINDS.some(k=>k[0]===L.kind)?L.kind:"race",
     meet:typeof L.meet==="string"?L.meet:"", date:/^\d{4}-\d\d-\d\d$/.test(L.date)?L.date:"", at:+L.at||0};}catch{}
@@ -526,7 +541,7 @@ if(!U.ps) U.ps=JSON.parse(JSON.stringify(PS_DEF));
 if(U.wo.mode!=="time") U.wo.mode="dist";
 U.wo.sec = WO_SECS.includes(+U.wo.sec) ? +U.wo.sec : 180;
 U.wo.loop = String(U.wo.loop??"").replace(/\D/g,"").slice(0,5);
-function saveUI(){try{localStorage.setItem("xc-ledger-ui",JSON.stringify({wo:U.wo,rep:U.rep,sort:U.sort,ps:U.ps,rlast:U.rlast}))}catch{}}
+function saveUI(){try{localStorage.setItem("xc-ledger-ui",JSON.stringify({wo:U.wo,rep:U.rep,sort:U.sort,ps:U.ps,rlast:U.rlast,rcPer:U.rcPer}))}catch{}}
 
 const I = {
   roster:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c.6-3.4 3-5.4 6-5.4s5.4 2 6 5.4"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14.2c2.4.2 4 1.9 4.5 4.8"/></svg>',
@@ -550,12 +565,13 @@ function render(){
   let html="";
   if(U.athlete && S.athletes[U.athlete]) html=viewAthlete(S.athletes[U.athlete]);
   else { U.athlete=null; if(U.view==="entry"&&!draft()) U.view="meets";
-    html = U.view==="roster"?viewRoster(): U.view==="meets"?viewMeets(): U.view==="entry"?viewEntry(): U.view==="workout"?viewWorkout(): viewCalc(); }
+    const mt=U.view==="meet"&&meetGet(U.meet); if(U.view==="meet"&&!mt) U.view="meets"; // its results were deleted or renamed
+    html = U.view==="roster"?viewRoster(): U.view==="meets"?viewMeets(): U.view==="meet"?viewMeet(mt): U.view==="entry"?viewEntry(): U.view==="workout"?viewWorkout(): viewCalc(); }
   // Preserve focus on calc/search inputs across re-render
   const fid=document.activeElement?.id, sel=[document.activeElement?.selectionStart,document.activeElement?.selectionEnd];
   app.innerHTML=html;
   if(fid){const el=document.getElementById(fid); if(el&&el.tagName==="INPUT"){el.focus(); try{el.setSelectionRange(sel[0],sel[1])}catch{}}}
-  const cur=U.view==="entry"?"meets":U.view;
+  const cur=U.view==="entry"||U.view==="meet"?"meets":U.view;
   $("#tabs").innerHTML=[["roster","Roster"],["meets","Meets"],["workout","Workout"],["calc","Calculator"]].map(([k,l])=>
     `<button class="tab" data-act="tab" data-v="${k}" ${cur===k&&!U.athlete?'aria-current="page"':''}>${I[k]}${l}</button>`).join("");
   if(U.view==="calc"&&!U.athlete) renderCalcOut();
@@ -648,7 +664,7 @@ function sparkSVG(a){
 
 function viewAthlete(a){
   const c=athleteCalc(a), rs=resultsFor(a.id), prs=prIds(rs);
-  const head=`<header class="top"><button class="iconbtn" data-act="back" aria-label="Back to roster">${I.back}</button>
+  const head=`<header class="top"><button class="iconbtn" data-act="back" aria-label="Back to ${U.view==="meet"?"meet":"roster"}">${I.back}</button>
     <div style="flex:1;min-width:0"><div class="sub">${[a.grade?`Grade ${esc(a.grade)}`:"",esc(a.group||""),a.gender==="f"?"Girls":"Boys"].filter(Boolean).join(" · ")}</div><h1>${esc(a.name)}</h1></div>
     <button class="iconbtn" data-act="editAthlete" data-id="${a.id}" aria-label="Edit runner">${I.edit}</button></header>`;
   const hero=`<section class="hero"><span class="flagstripe" aria-hidden="true"></span>
@@ -789,7 +805,78 @@ function viewMeets(){
           <div class="small">${esc(dists.join(" · "))}${tt?" · Time trial":""}</div>
           ${cond.length?`<div class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cond.join(" · "))}</div>`:""}</div>
         <div class="right"><div class="big">${n}</div><div class="small">runner${n===1?"":"s"}</div></div></button>`}).join("")}</div>
-    <p class="small" style="margin:0">Tap a meet to fix times or add runners. Estimates don't count as meets, so they aren't listed.</p>
+    <p class="small" style="margin:0">Tap a meet to see team places, PRs and a recap to share. Estimates don't count as meets, so they aren't listed.</p>
+  </div>`;
+}
+
+/* ============ meet recap: team places, PR / SB / First, section stats ============ */
+const isRace = r => ["race","tt"].includes(r.kind||"race"); // counts for PRs (no estimates or workouts)
+const runBefore = (x,r) => (x.date||"")<(r.date||"") || (x.date||"")===(r.date||"") && ((x.created||0)<(r.created||0) || (x.created||0)===(r.created||0)&&String(x.id)<String(r.id));
+const seasonStart = iso => {const [y,m]=String(iso||"").split("-").map(Number); return y?`${y}-${m>=7?"07":"01"}-01`:""}; // Jul–Dec or Jan–Jun
+const longDate = iso => {const p=dparts(iso); return p.y?`${p.mo} ${p.dy}, ${p.y}`:""};
+const ord = n => n+(n%100>=11&&n%100<=13?"th":["th","st","nd","rd"][n%10]||"th");
+const gapTxt = d => {const t=Math.round(d*10)/10; return t<60?`${t%1?t.toFixed(1):t} s`:fmt(t)}; // "36 s", "2.5 s", "1:12"
+// What a result means for the runner, from their earlier races and time trials at the same distance:
+// First (first ever), PR (faster than every earlier one; by = seconds faster than the old PR), SB (fastest this season; by = vs the old season best)
+function rcMark(r,hist){
+  const k=dkey(r), sec=+r.seconds, prior=hist.filter(x=>x.id!==r.id&&dkey(x)===k&&runBefore(x,r));
+  if(!prior.length) return {b:"First"};
+  const best=Math.min(...prior.map(x=>+x.seconds));
+  if(sec<best) return {b:"PR",by:best-sec};
+  const ss=seasonStart(r.date), sp=prior.filter(x=>(x.date||"")>=ss);
+  if(!sp.length) return {b:"SB"}; // first race of the season at this distance
+  const sb=Math.min(...sp.map(x=>+x.seconds));
+  return sec<sb?{b:"SB",by:sb-sec}:{b:""};
+}
+// A meet as sections (Girls, Boys; split by distance when the meet had more than one), each sorted by time with team places
+function recapOf(m){
+  const multi=new Set(m.rs.map(dkey)).size>1, G={}, hist={};
+  Object.values(S.results).forEach(x=>{if(isRace(x)&&+x.seconds>0)(hist[x.athleteId]||(hist[x.athleteId]=[])).push(x)});
+  m.rs.forEach(r=>{const a=S.athletes[r.athleteId]; if(!a||!(+r.seconds>0)) return; const g=a.gender==="f"?"f":"m", k=g+"|"+dkey(r);
+    const s=G[k]||(G[k]={g, km:distKm(r)||0, dl:distLabel(r), label:(g==="f"?"Girls":"Boys")+(multi?` · ${distLabel(r)}`:""), by:{}});
+    const o=s.by[a.id]; if(!o||+r.seconds<+o.seconds) s.by[a.id]=r}); // a runner with two results here counts once, with the faster one
+  const secs=Object.values(G).map(s=>{
+    const rows=Object.values(s.by).map(r=>({r, a:S.athletes[r.athleteId], sec:+r.seconds, place:+r.place>0?+r.place:0, ...rcMark(r,hist[r.athleteId]||[])}))
+      .sort((x,y)=>x.sec-y.sec||(x.place||1e9)-(y.place||1e9)||x.a.name.localeCompare(y.a.name));
+    rows.forEach((x,i)=>{x.tp=i&&x.sec===rows[i-1].sec?rows[i-1].tp:i+1}); // ties share a place
+    const n=rows.length, avg=k=>rows.slice(0,k).reduce((t,x)=>t+x.sec,0)/k;
+    return {g:s.g, km:s.km, dl:s.dl, label:s.label, rows, n, avg5:n>=5?avg(5):null, avg:n>1?avg(n):null, spread:n>=5?rows[4].sec-rows[0].sec:null, prs:rows.filter(x=>x.b==="PR").length};
+  }).sort((x,y)=>(x.g==="f"?0:1)-(y.g==="f"?0:1)||y.km-x.km||y.n-x.n); // girls then boys, longer race first
+  const all=secs.flatMap(s=>s.rows), cnt=b=>all.filter(x=>x.b===b).length;
+  return {secs, n:new Set(all.map(x=>x.a.id)).size, prs:cnt("PR"), sbs:cnt("SB"), firsts:cnt("First"), place:all.some(x=>x.place)};
+}
+const rcPace = (x,s) => s.km ? fmt(x.sec/(s.km/1.609344)) : "–"; // per mile, whole seconds
+const rcAvg = s => fmtRace(Math.round((s.avg5??s.avg)*10)/10);
+// Section stats: ["Top-5 average 20:41", "1–5 spread 1:12", "3 PRs"]
+const rcSum = s => [s.avg5!=null?`Top-5 average ${rcAvg(s)}`:s.avg!=null?`Average ${rcAvg(s)}`:"", s.spread!=null?`1–5 spread ${gapTxt(s.spread)}`:"", s.prs?`${s.prs} PR${s.prs===1?"":"s"}`:""].filter(Boolean);
+// What was run: distance(s) · type · conditions
+function rcWhat(m,R){
+  const cond=COND.filter(c=>m.rs.some(r=>condOf(r).includes(c)));
+  return [[...new Set(R.secs.map(s=>s.dl))].join(", "), m.rs.every(r=>r.kind==="tt")?"Time trial":"", cond.join(", ")].filter(Boolean);
+}
+const rcSub = (m,R) => [SET.team, longDate(m.date), ...rcWhat(m,R)].filter(Boolean); // the line under the title
+const rcBadge = x => x.b?`<span class="pill ${x.b==="PR"?"pr":x.b==="SB"?"sb":"first"}">${x.b}</span>${x.by?` −${gapTxt(x.by)}`:""}`:"";
+
+function viewMeet(m){
+  const R=recapOf(m), what=rcWhat(m,R);
+  const head=`<header class="top"><button class="iconbtn" data-act="meetBack" aria-label="Back to meets">${I.back}</button>
+    <div style="flex:1;min-width:0"><div class="sub">${esc(longDate(m.date)||"Meet results")}</div><h1>${esc(meetName(m))}</h1></div>
+    <button class="iconbtn" data-act="recapOpen" aria-label="Share recap" ${R.secs.length?"":"disabled"}>${I.share}</button></header>`;
+  const stat=(l,v)=>`<div class="stat"><div class="label">${l}</div><div class="v">${v}</div></div>`;
+  return head+`<div class="wrap stack">${banners()}
+    <section class="hero"><span class="flagstripe" aria-hidden="true"></span>
+      <div class="stats mstats">${stat("PRs",R.prs)}${stat("Season bests",R.sbs)}${stat("Runners",R.n)}</div>
+      <div class="basis">${esc(what.join(" · ")||"Meet results")}${R.firsts?` · <b>${R.firsts}</b> first race${R.firsts===1?"":"s"} at the distance`:""}</div></section>
+    <div class="mbtns"><button class="btn" data-act="recapOpen" ${R.secs.length?"":"disabled"}>${I.share}Share recap</button><button class="btn ghost" data-act="editMeet" data-v="${esc(m.key)}">${I.edit}Edit times</button></div>
+    ${R.secs.length?"":`<div class="card empty"><p>None of this meet's results has a time. Tap Edit times to add them.</p></div>`}
+    ${R.secs.map(s=>{const sum=rcSum(s);
+      return `<div class="sectionhead"><span class="label">${esc(s.label)}</span><span class="small">${nRunners(s.n)}</span></div>
+      <div class="list">${s.rows.map(x=>`<button class="mrow" data-act="open" data-id="${esc(x.a.id)}" data-v="ledger">
+        <span class="mpl">${x.tp}</span>
+        <div style="min-width:0"><div class="name">${esc(x.a.name)}</div><div class="small"><span class="num">${rcPace(x,s)}</span> /mi${x.place?` · ${ord(x.place)} overall`:""}</div></div>
+        <div class="right"><div class="big">${fmtRace(x.sec)}</div>${x.b?`<div class="small">${rcBadge(x)}</div>`:""}</div></button>`).join("")}
+        ${sum.length?`<div class="msum">${esc(sum.join(" · "))}</div>`:""}</div>`}).join("")}
+    <p class="small" style="margin:0">PR: fastest ever at the distance. SB: season best (Jul–Dec or Jan–Jun). First: first race or time trial at the distance. Times are as run, without course adjustments. Tap a runner to open their ledger.</p>
   </div>`;
 }
 
@@ -863,7 +950,7 @@ function viewEntry(){
   const d=draft(), edit=!!d.key, gs=groups(), all=Object.keys(S.athletes).length;
   if(d.grp!=="All"&&!gs.includes(d.grp)) d.grp="All";
   const rows=entryRows(d), t=entryTally(d), twice=[...new Set(d.extra.map(id=>S.results[id]?.athleteId))].filter(aid=>S.athletes[aid]).map(aid=>S.athletes[aid].name);
-  const head=`<header class="top"><button class="iconbtn" data-act="entryBack" aria-label="Back to meets">${I.back}</button>
+  const head=`<header class="top"><button class="iconbtn" data-act="entryBack" aria-label="Back to ${edit?"meet":"meets"}">${I.back}</button>
     <div style="flex:1;min-width:0"><div class="sub">${edit?"Edit results":"Meets"}</div><h1>${edit?esc(d.title):"Enter results"}</h1></div></header>`;
   return head+`<div class="wrap stack">${banners()}
     ${d.resumed?`<div class="notice"><span style="flex:1;min-width:0">Picking up where you left off. Nothing is saved until you tap Save.</span><button data-act="entryReset">Start over</button></div>`:""}
@@ -952,7 +1039,7 @@ function entrySave(){
   const ok=putBatch(W);
   U.rlast={dist:d.dist,meters:meters||"",kind:d.kind,meet,date:d.date,at:now}; saveUI(); // the result sheet then prefills this meet
   delete U.drafts[U.ek]; delete U.drafts[tk];
-  U.view="meets"; render(); scrollTo(0,0); // B4: open this meet's detail instead
+  U.view="meet"; U.meet=tk; render(); scrollTo(0,0); // the meet's results and recap (the Meets list if every time was cleared)
   if(ok) toast([saved.length?`Saved ${nResults(saved.length)}`:"",gone.length?`${gone.length} moved to Trash`:""].filter(Boolean).join(" · "));
 }
 // Drafts of edited meets point at saved results; drop them when all the data is replaced
@@ -1225,6 +1312,14 @@ function sheetHTML(s){
     <div id="pOut" class="stack" style="margin-top:14px">${pasteOut()}</div>
     <div class="actions" style="position:sticky;bottom:calc(-20px - env(safe-area-inset-bottom,0px));margin:16px -16px calc(-20px - env(safe-area-inset-bottom,0px));padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));background:var(--bg)">
       <button type="button" class="btn ghost" data-act="closeSheet">Cancel</button><button type="button" class="btn" id="pFill" data-act="pasteFill" ${n?"":"disabled"}>${pasteBtnLabel(n)}</button></div>`;}
+  if(s.type==="recap"){const m=meetGet(s.key), R=m&&recapOf(m);
+    return `<h2>Share recap</h2>
+    <p class="small" style="margin:-6px 0 14px">An image of ${m?esc(meetName(m)):"this meet"} with team places, PRs and season bests, ready to text the team or parents.</p>
+    <div class="stack">
+      ${R&&R.secs.length>1?`<div class="field"><span class="label">Images</span><div class="seg">${[["all","One image"],["sec","One per section"]].map(([k,l])=>`<button type="button" data-act="rcPer" data-v="${k}" aria-pressed="${U.rcPer===k}">${l}</button>`).join("")}</div></div>`:""}
+      <div id="psOut" class="stack">${s.imgs?psPreviewHTML(s.imgs,"Meet recap","rcCopy"):s.err?rcFailHTML():`<p class="small" style="margin:0">Creating image…</p>`}</div>
+    </div>
+    <div class="actions"><button type="button" class="btn ghost" data-act="closeSheet">Done</button></div>`;}
   if(s.type==="copy") return `<h2>Copy text</h2><p class="small">Copying isn't allowed here. Select the text below and copy it.</p><textarea id="copyArea" style="width:100%;min-height:240px;border-radius:12px;border:1px solid var(--line);padding:12px;background:var(--surface);font:13px/1.5 var(--f-num)" readonly>${esc(s.text)}</textarea><div class="actions"><button class="btn" data-act="closeSheet">Done</button></div>`;
   return "";
 }
@@ -1272,7 +1367,7 @@ document.addEventListener("click",e=>{
   const act=t.dataset.act, v=t.dataset.v;
   switch(act){
     case "tab": U.view=v; U.athlete=null; render(); scrollTo(0,0); break;
-    case "open": U.athlete=t.dataset.id; U.atab="paces"; render(); scrollTo(0,0); break;
+    case "open": U.athlete=t.dataset.id; U.atab=v==="ledger"?"ledger":"paces"; render(); scrollTo(0,0); break;
     case "back": U.athlete=null; render(); break;
     case "grp": U.grp=v; render(); break;
     case "gender": U.gender=v; render(); break;
@@ -1287,9 +1382,13 @@ document.addEventListener("click",e=>{
     case "wgender": U.wo.gender=v; saveUI(); render(); break;
     case "cgender": U.calc.gender=v; render(); break;
     case "entryNew": entryOpen(null); break;
-    case "openMeet": entryOpen(v); break; // B4: open the meet's detail here
+    case "openMeet": U.view="meet"; U.meet=v; render(); scrollTo(0,0); break;
+    case "meetBack": U.view="meets"; render(); scrollTo(0,0); break;
+    case "recapOpen": {const m=meetGet(U.meet); if(m){openSheet({type:"recap",key:m.key}); rcMake()} break;}
+    case "rcPer": U.rcPer=v==="sec"?"sec":"all"; saveUI(); if(SH?.type==="recap"){psGen++; psClear(); SH.err=false; rerenderSheet(); rcMake()} break;
+    case "rcCopy": {const m=SH?.type==="recap"&&meetGet(SH.key); if(m) copyText(rcText(m),psCopyBox); break;}
     case "editMeet": entryOpen(v); break;
-    case "entryBack": U.view="meets"; render(); scrollTo(0,0); break;
+    case "entryBack": {const k=draft()?.key; if(k&&meetGet(k)){U.view="meet"; U.meet=k} else U.view="meets"; render(); scrollTo(0,0); break;} // an edited meet goes back to its results
     case "entryReset": {const d=draft(); U.drafts[U.ek]=entryDraft(d?.key); render(); scrollTo(0,0); toast("Started over"); break;}
     case "egrp": {const d=draft(); if(d){d.grp=v; render()} break;}
     case "egender": {const d=draft(); if(d){d.gender=v; render()} break;}
@@ -1343,9 +1442,7 @@ document.addEventListener("click",e=>{
     case "psPer": U.ps.per=+v; psChanged(); break;
     case "psMake": psMake(); break;
     case "psShare": psShare(); break;
-    case "psCopy": copyText(psText(U.ps),txt=>{const o=$("#psOut");if(!o)return;o.querySelector(".pscopy")?.remove();
-      o.insertAdjacentHTML("beforeend",`<div class="pscopy stack"><p class="small" style="margin:0">Copying isn't allowed here. Select the text below and copy it.</p><textarea readonly style="width:100%;min-height:200px;border-radius:12px;border:1px solid var(--line);padding:12px;background:var(--surface);font:13px/1.5 var(--f-num)">${esc(txt)}</textarea></div>`);
-      const ta=o.querySelector(".pscopy textarea");ta.focus();ta.select();}); break;
+    case "psCopy": copyText(psText(U.ps),psCopyBox); break;
     case "seed": seed(); break;
     case "settings": openSheet({type:"settings"}); break;
     case "exportData": exportData(); break;
@@ -1492,45 +1589,57 @@ function psFit(ctx,text,max){
   let t=text; while(t.length>1&&ctx.measureText(t+"…").width>max) t=t.slice(0,-1);
   return t.trimEnd()+"…";
 }
+// Shared by the pace sheet and the meet recap images: a white canvas with the title and subtitle centered at the top
+function psCanvas(W,H,PAD,title,sub,top,titleH,subH){
+  const cv=document.createElement("canvas"); cv.width=W; cv.height=H;
+  const ctx=cv.getContext("2d"); ctx.textBaseline="middle";
+  ctx.fillStyle="#FFFFFF"; ctx.fillRect(0,0,W,H);
+  let ts=34; ctx.font=`400 ${ts}px ${PS_FONT}`;
+  while(ts>20&&ctx.measureText(title).width>W-PAD*2){ts-=2;ctx.font=`400 ${ts}px ${PS_FONT}`}
+  ctx.fillStyle="#111111"; ctx.textAlign="center"; ctx.fillText(psFit(ctx,title,W-PAD*2),W/2,top+titleH/2);
+  if(sub){ctx.font=`400 21px ${PS_FONT}`;ctx.fillStyle="#666666";ctx.fillText(psFit(ctx,sub,W-PAD*2),W/2,top+titleH+subH/2)}
+  return {cv,ctx};
+}
+// A table: dark header row, zebra rows, grid lines. cols: [{w, lines:[header, optional 2nd line], left: the bold name column}]; rows: cell text per column.
+// Returns the table's bottom and right edges.
+function psDrawTable(ctx,x0,tableY,cols,headH,ROW,rows){
+  const xs=[x0]; cols.forEach(c=>xs.push(xs[xs.length-1]+c.w));
+  const right=xs[xs.length-1];
+  // header row
+  ctx.fillStyle="#222222"; ctx.fillRect(x0,tableY,right-x0,headH);
+  ctx.fillStyle="#FFFFFF"; ctx.font=`700 26px ${PS_FONT}`;
+  cols.forEach((c,i)=>{
+    if(c.left){ctx.textAlign="left"; ctx.fillText(c.lines[0],xs[i]+20,tableY+headH/2); return}
+    const cx=(xs[i]+xs[i+1])/2; ctx.textAlign="center";
+    if(c.lines.length===1) ctx.fillText(psFit(ctx,c.lines[0],c.w-24),cx,tableY+headH/2);
+    else c.lines.forEach((l,k)=>ctx.fillText(psFit(ctx,l,c.w-24),cx,tableY+headH/2+(k?16:-16)));
+  });
+  // body rows
+  rows.forEach((cells,i)=>{
+    const y=tableY+headH+i*ROW;
+    ctx.fillStyle=i%2?"#F4F4F4":"#FFFFFF"; ctx.fillRect(x0,y,right-x0,ROW);
+    ctx.fillStyle="#111111";
+    cols.forEach((c,k)=>{
+      if(c.left){ctx.textAlign="left"; ctx.font=`700 28px ${PS_FONT}`; ctx.fillText(psFit(ctx,cells[k],c.w-40),xs[k]+20,y+ROW/2+1)}
+      else{ctx.textAlign="center"; ctx.font=`400 28px ${PS_FONT}`; ctx.fillText(psFit(ctx,cells[k],c.w-16),(xs[k]+xs[k+1])/2,y+ROW/2+1)}
+    });
+  });
+  // grid lines
+  const bottom=tableY+headH+rows.length*ROW;
+  ctx.strokeStyle="#D0D0D0"; ctx.lineWidth=1.5;
+  for(let i=0;i<=rows.length;i++){const y=Math.round(tableY+headH+i*ROW)+.5;ctx.beginPath();ctx.moveTo(x0,y);ctx.lineTo(right,y);ctx.stroke()}
+  xs.forEach((x,i)=>{ctx.strokeStyle=i===0||i===xs.length-1?"#D0D0D0":"#C8C8C8";ctx.beginPath();ctx.moveTo(Math.round(x)+.5,tableY+headH);ctx.lineTo(Math.round(x)+.5,bottom);ctx.stroke()});
+  ctx.strokeStyle="#555555"; xs.slice(1,-1).forEach(x=>{ctx.beginPath();ctx.moveTo(Math.round(x)+.5,tableY);ctx.lineTo(Math.round(x)+.5,tableY+headH);ctx.stroke()});
+  return {bottom,right};
+}
 function psDrawPage(L,cfg,rows,page,pages){
   const {PAD,W,nameW,colW,headLines,headH,ROW}=L;
   const title=(cfg.title||"").trim()||psAutoTitle(cfg), sub=psSubtitle(cfg,page,pages);
   const top=36, titleH=44, subH=sub?34:0, gap=24, tableY=top+titleH+subH+gap;
   const foot=rows.some(r=>estPace(r.c)), H=tableY+headH+rows.length*ROW+48+(foot?PS_FOOT_H:0);
-  const cv=document.createElement("canvas"); cv.width=W; cv.height=H;
-  const ctx=cv.getContext("2d"); ctx.textBaseline="middle";
-  ctx.fillStyle="#FFFFFF"; ctx.fillRect(0,0,W,H);
-  // title + subtitle
-  let ts=34; ctx.font=`400 ${ts}px ${PS_FONT}`;
-  while(ts>20&&ctx.measureText(title).width>W-PAD*2){ts-=2;ctx.font=`400 ${ts}px ${PS_FONT}`}
-  ctx.fillStyle="#111111"; ctx.textAlign="center"; ctx.fillText(psFit(ctx,title,W-PAD*2),W/2,top+titleH/2);
-  if(sub){ctx.font=`400 21px ${PS_FONT}`;ctx.fillStyle="#666666";ctx.fillText(psFit(ctx,sub,W-PAD*2),W/2,top+titleH+subH/2)}
-  const xs=[PAD,PAD+nameW]; colW.forEach(w=>xs.push(xs[xs.length-1]+w));
-  const right=xs[xs.length-1];
-  // header row
-  ctx.fillStyle="#222222"; ctx.fillRect(PAD,tableY,right-PAD,headH);
-  ctx.fillStyle="#FFFFFF"; ctx.font=`700 26px ${PS_FONT}`;
-  ctx.textAlign="left"; ctx.fillText("Athlete",PAD+20,tableY+headH/2);
-  ctx.textAlign="center";
-  headLines.forEach((lines,i)=>{const cx=(xs[i+1]+xs[i+2])/2;
-    if(lines.length===1) ctx.fillText(psFit(ctx,lines[0],colW[i]-24),cx,tableY+headH/2);
-    else lines.forEach((l,k)=>ctx.fillText(psFit(ctx,l,colW[i]-24),cx,tableY+headH/2+(k?16:-16)));
-  });
-  // body rows
-  rows.forEach((r,i)=>{
-    const y=tableY+headH+i*ROW;
-    ctx.fillStyle=i%2?"#F4F4F4":"#FFFFFF"; ctx.fillRect(PAD,y,right-PAD,ROW);
-    ctx.fillStyle="#111111"; ctx.textAlign="left"; ctx.font=`700 28px ${PS_FONT}`;
-    ctx.fillText(psFit(ctx,psName(r),nameW-40),PAD+20,y+ROW/2+1);
-    ctx.textAlign="center"; ctx.font=`400 28px ${PS_FONT}`;
-    cfg.cols.forEach((col,k)=>ctx.fillText(psFit(ctx,psCell(r.c,col,cfg.end),colW[k]-16),(xs[k+1]+xs[k+2])/2,y+ROW/2+1));
-  });
-  // grid lines
-  const bottom=tableY+headH+rows.length*ROW;
-  ctx.strokeStyle="#D0D0D0"; ctx.lineWidth=1.5;
-  for(let i=0;i<=rows.length;i++){const y=Math.round(tableY+headH+i*ROW)+.5;ctx.beginPath();ctx.moveTo(PAD,y);ctx.lineTo(right,y);ctx.stroke()}
-  xs.forEach((x,i)=>{ctx.strokeStyle=i===0||i===xs.length-1?"#D0D0D0":"#C8C8C8";ctx.beginPath();ctx.moveTo(Math.round(x)+.5,tableY+headH);ctx.lineTo(Math.round(x)+.5,bottom);ctx.stroke()});
-  ctx.strokeStyle="#555555"; xs.slice(1,-1).forEach(x=>{ctx.beginPath();ctx.moveTo(Math.round(x)+.5,tableY);ctx.lineTo(Math.round(x)+.5,tableY+headH);ctx.stroke()});
+  const {cv,ctx}=psCanvas(W,H,PAD,title,sub,top,titleH,subH);
+  const cols=[{w:nameW,lines:["Athlete"],left:true},...colW.map((w,i)=>({w,lines:headLines[i]}))];
+  const {bottom,right}=psDrawTable(ctx,PAD,tableY,cols,headH,ROW,rows.map(r=>[psName(r),...cfg.cols.map(col=>psCell(r.c,col,cfg.end))]));
   // footnote for runners whose paces come from a coach estimate
   if(foot){ctx.fillStyle="#555555";ctx.textAlign="left";ctx.font=`400 22px ${PS_FONT}`;ctx.fillText(psFit(ctx,PS_EST_NOTE,right-PAD),PAD,bottom+34)}
   return cv;
@@ -1538,10 +1647,31 @@ function psDrawPage(L,cfg,rows,page,pages){
 function psClear(){ if(SH?.imgs){ SH.imgs.forEach(x=>{try{URL.revokeObjectURL(x.url)}catch{}}); SH.imgs=null; } }
 let psGen=0; // bumped whenever images being created would no longer match the builder
 function psChanged(){ psGen++; saveUI(); psClear(); rerenderSheet(); }
-function psPreviewHTML(imgs){
-  return `<div class="psprev">${imgs.map((x,i)=>`<img src="${x.url}" alt="Pace sheet${imgs.length>1?`, page ${i+1}`:""}">`).join("")}</div>
-    <div class="actions" style="margin-top:0"><button type="button" class="btn" data-act="psShare">${I.share}Share ${imgs.length>1?imgs.length+" images":"image"}</button><button type="button" class="btn ghost" data-act="psCopy">${I.copy}Copy as text</button></div>
+function psPreviewHTML(imgs,alt="Pace sheet",copyAct="psCopy"){
+  return `<div class="psprev">${imgs.map((x,i)=>`<img src="${x.url}" alt="${alt}${imgs.length>1?`, page ${i+1}`:""}">`).join("")}</div>
+    <div class="actions" style="margin-top:0"><button type="button" class="btn" data-act="psShare">${I.share}Share ${imgs.length>1?imgs.length+" images":"image"}</button><button type="button" class="btn ghost" data-act="${copyAct}">${I.copy}Copy as text</button></div>
     <p class="hint" style="margin:0">Share opens your phone's share menu: Messages, AirDrop or Save Image. You can also press and hold an image to save it.</p>`;
+}
+// Where copying isn't allowed: the text goes under the preview, selected, to copy by hand
+function psCopyBox(txt){const o=$("#psOut");if(!o)return;o.querySelector(".pscopy")?.remove();
+  o.insertAdjacentHTML("beforeend",`<div class="pscopy stack"><p class="small" style="margin:0">Copying isn't allowed here. Select the text below and copy it.</p><textarea readonly style="width:100%;min-height:200px;border-radius:12px;border:1px solid var(--line);padding:12px;background:var(--surface);font:13px/1.5 var(--f-num)">${esc(txt)}</textarea></div>`);
+  const ta=o.querySelector(".pscopy textarea");ta.focus();ta.select();}
+// iPhones on iOS 17 can't make a canvas over 4096×4096 pixels in area (or taller than 32767), so long images split into pages
+const psMaxH = W => Math.min(16777216/W,32767);
+const psSlug = (s,fb) => String(s).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,60)||fb;
+// Draw each page and turn it into a PNG file: [{file,url}], or null if the phone couldn't make one
+async function psFiles(pages,draw,slug){
+  const imgs=[];
+  try{
+    for(let p=0;p<pages;p++){
+      const cv=draw(p);
+      const blob=await new Promise(res=>cv.toBlob(res,"image/png"));
+      if(!blob) throw new Error("toBlob");
+      const file=new File([blob],`${slug}${pages>1?`-${p+1}`:""}.png`,{type:"image/png"});
+      imgs.push({file,url:URL.createObjectURL(file)});
+    }
+  }catch{ imgs.forEach(x=>URL.revokeObjectURL(x.url)); return null }
+  return imgs;
 }
 async function psMake(){
   if(!SH||SH.type!=="pacesheet") return;
@@ -1550,20 +1680,11 @@ async function psMake(){
   const stale=()=>SH!==sh||gen!==psGen;
   const btn=document.querySelector('[data-act="psMake"]'); if(btn){btn.disabled=true;btn.lastChild.textContent="Creating…"}
   const L=psLayout(cfg,rows);
-  // iPhones on iOS 17 can't make a canvas over 4096×4096 pixels in area, so very long sheets split into pages
-  const cap=Math.max(1,Math.floor((Math.min(16777216/L.W,32767)-(138+L.headH+48+(rows.some(r=>estPace(r.c))?PS_FOOT_H:0)))/L.ROW));
+  const cap=Math.max(1,Math.floor((psMaxH(L.W)-(138+L.headH+48+(rows.some(r=>estPace(r.c))?PS_FOOT_H:0)))/L.ROW));
   const want=cfg.per>0?cfg.per:rows.length, per=Math.min(want,cap), pages=Math.ceil(rows.length/per), size=Math.ceil(rows.length/pages);
-  const slug=((cfg.title||"").trim()||psAutoTitle(cfg)).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,60)||"pace-sheet";
-  const imgs=[];
-  try{
-    for(let p=0;p<pages;p++){
-      const cv=psDrawPage(L,cfg,rows.slice(p*size,(p+1)*size),p,pages);
-      const blob=await new Promise(res=>cv.toBlob(res,"image/png"));
-      if(!blob) throw new Error("toBlob");
-      const file=new File([blob],`${slug}${pages>1?`-${p+1}`:""}.png`,{type:"image/png"});
-      imgs.push({file,url:URL.createObjectURL(file)});
-    }
-  }catch{ imgs.forEach(x=>URL.revokeObjectURL(x.url)); if(!stale()){ psResetMakeBtn(); toast(pages>1?"Couldn't create the images. Try Pages of 30 with fewer runners.":"Couldn't create the image. Try Pages of 30."); } return }
+  const slug=psSlug((cfg.title||"").trim()||psAutoTitle(cfg),"pace-sheet");
+  const imgs=await psFiles(pages,p=>psDrawPage(L,cfg,rows.slice(p*size,(p+1)*size),p,pages),slug);
+  if(!imgs){ if(!stale()){ psResetMakeBtn(); toast(pages>1?"Couldn't create the images. Try Pages of 30 with fewer runners.":"Couldn't create the image. Try Pages of 30."); } return }
   if(stale()){ imgs.forEach(x=>URL.revokeObjectURL(x.url)); return }
   psClear(); SH.imgs=imgs; psResetMakeBtn();
   const out=$("#psOut"); if(out){ out.innerHTML=psPreviewHTML(imgs); out.scrollIntoView({block:"start",behavior:"smooth"}); }
@@ -1584,6 +1705,90 @@ function psText(cfg){
   const {rows}=psRows(cfg), heads=cfg.cols.map(colHead);
   return [(cfg.title||"").trim()||psAutoTitle(cfg), psSubtitle(cfg,0,1), ""].concat(rows.map(r=>`${psName(r)}: `+cfg.cols.map((col,i)=>`${heads[i]} ${psCell(r.c,col,cfg.end)}`).join(" · ")))
     .concat(rows.some(r=>estPace(r.c))?["",PS_EST_NOTE]:[]).join("\n");
+}
+
+/* ============ meet recap (image export in the pace sheet's style, and text) ============ */
+const rcNote = x => x.b==="PR"?`PR −${gapTxt(x.by)}`:x.b==="SB"&&x.by?`SB −${gapTxt(x.by)}`:x.b; // image Note column
+const rcCells = (x,s,place) => [String(x.tp), x.a.name, fmtRace(x.sec), rcPace(x,s), ...(place?[x.place?String(x.place):""]:[]), rcNote(x)];
+// Columns #, Athlete, Time, Pace /mi, (Place, when places were entered), Note; one width for every section so the tables line up
+function rcLayout(R){
+  const ctx=document.createElement("canvas").getContext("2d"), PAD=48, MINW=1080, place=R.place;
+  const heads=["#","Athlete","Time","Pace /mi",...(place?["Place"]:[]),"Note"], cells=R.secs.flatMap(s=>s.rows.map(x=>rcCells(x,s,place)));
+  ctx.font=`400 28px ${PS_FONT}`;
+  const w=heads.map((h,i)=>Math.max(i?150:90,...cells.map(c=>ctx.measureText(c[i]).width+56)));
+  ctx.font=`700 26px ${PS_FONT}`; heads.forEach((h,i)=>{w[i]=Math.max(w[i],Math.ceil(ctx.measureText(h).width+36))});
+  ctx.font=`700 28px ${PS_FONT}`; w[1]=Math.min(560,Math.max(320,...cells.map(c=>ctx.measureText(c[1]).width+48)));
+  let extra=MINW-PAD*2-w.reduce((a,b)=>a+b,0);
+  for(let i=2;i<w.length&&extra>0;i++){const add=Math.min(extra,Math.max(0,200-w[i]));w[i]+=add;extra-=add}
+  if(extra>0) w[1]+=extra;
+  return {PAD, W:PAD*2+w.reduce((a,b)=>a+b,0), place, cols:heads.map((h,i)=>({w:w[i],lines:[h],left:i===1})),
+    headH:64, ROW:62, secH:64, sumH:56, gapS:28, head:138, foot:40};
+}
+// Sections onto pages: everything on one image unless `split` (each section starts a new image) or it's taller than an iPhone canvas allows.
+// A page is a list of {s: section, from, to: its rows, cont: continues from the page before, sum: its stats line goes under}.
+function rcPages(L,R,split){
+  const maxH=psMaxH(L.W), pages=[]; let pg=null, h=0;
+  R.secs.forEach(s=>{
+    const sumH=rcSum(s).length?L.sumH:0;
+    if(split&&pg){pages.push(pg);pg=null}
+    for(let i=0;i<s.rows.length;){
+      if(!pg){pg=[];h=L.head+L.foot}
+      const room=maxH-h-(pg.length?L.gapS:0)-L.secH-L.headH, left=s.rows.length-i;
+      let n=left*L.ROW+sumH<=room?left:Math.min(left-1,Math.floor(room/L.ROW)); // the rest with its stats line, or as many rows as fit
+      if(n<1&&pg.length){pages.push(pg);pg=null;continue}
+      n=Math.max(1,n);
+      const last=i+n===s.rows.length;
+      pg.push({s,from:i,to:i+n,cont:i>0,sum:last&&sumH>0});
+      h+=(pg.length>1?L.gapS:0)+L.secH+L.headH+n*L.ROW+(last?sumH:0); i+=n;
+      if(!last){pages.push(pg);pg=null}
+    }
+  });
+  if(pg) pages.push(pg);
+  return pages;
+}
+function rcDrawPage(L,m,R,blocks,page,pages){
+  const {PAD,W,headH,ROW}=L, title=meetName(m), sub=[...rcSub(m,R),pages>1?`Page ${page+1} of ${pages}`:""].filter(Boolean).join("  ·  ");
+  const top=36, titleH=44, subH=sub?34:0, gap=24;
+  let y=top+titleH+subH+gap;
+  const H=y+blocks.reduce((t,b,i)=>t+(i?L.gapS:0)+L.secH+headH+(b.to-b.from)*ROW+(b.sum?L.sumH:0),0)+L.foot;
+  const {cv,ctx}=psCanvas(W,H,PAD,title,sub,top,titleH,subH);
+  blocks.forEach((b,i)=>{
+    if(i) y+=L.gapS;
+    // section name, runner count on the right
+    ctx.fillStyle="#111111"; ctx.textAlign="left"; ctx.font=`700 30px ${PS_FONT}`;
+    ctx.fillText(psFit(ctx,b.s.label+(b.cont?" (continued)":""),W-PAD*2-180),PAD,y+L.secH/2);
+    ctx.fillStyle="#666666"; ctx.textAlign="right"; ctx.font=`400 21px ${PS_FONT}`; ctx.fillText(nRunners(b.s.n),W-PAD,y+L.secH/2);
+    y=psDrawTable(ctx,PAD,y+L.secH,L.cols,headH,ROW,b.s.rows.slice(b.from,b.to).map(x=>rcCells(x,b.s,L.place))).bottom;
+    // section stats under its table
+    if(b.sum){ctx.fillStyle="#555555"; ctx.textAlign="left"; ctx.font=`400 22px ${PS_FONT}`; ctx.fillText(psFit(ctx,rcSum(b.s).join("  ·  "),W-PAD*2),PAD,y+34); y+=L.sumH}
+  });
+  return cv;
+}
+const rcFailHTML = () => `<div class="notice">Couldn't create the image. You can still copy the results as text.</div><button type="button" class="btn ghost block" data-act="rcCopy">${I.copy}Copy as text</button>`;
+// Images are made when the recap sheet opens, so Share can open the share menu straight from the tap
+async function rcMake(){
+  const sh=SH; if(sh?.type!=="recap") return; const m=meetGet(sh.key), R=m&&recapOf(m), o=()=>$("#psOut");
+  const gen=++psGen;
+  if(!R||!R.secs.length){sh.err=true; if(o()) o().innerHTML=rcFailHTML(); return}
+  const L=rcLayout(R), pages=rcPages(L,R,U.rcPer==="sec");
+  const imgs=await psFiles(pages.length,p=>rcDrawPage(L,m,R,pages[p],p,pages.length),psSlug(`${meetName(m)} recap`,"meet-recap"));
+  if(SH!==sh||gen!==psGen){imgs?.forEach(x=>URL.revokeObjectURL(x.url)); return}
+  if(!imgs){sh.err=true; if(o()) o().innerHTML=rcFailHTML(); return}
+  psClear(); sh.imgs=imgs; if(o()) o().innerHTML=psPreviewHTML(imgs,"Meet recap","rcCopy");
+}
+// For parents: "1. Maya Ortiz 20:05 (PR, −36 s)" per runner, each section's stats, then the team's PRs and season bests
+function rcText(m){
+  const R=recapOf(m), L=[meetName(m), rcSub(m,R).join(" · ")];
+  const dist=dl=>/^[A-Z][a-z]/.test(dl)?dl.toLowerCase():dl.replace(/ miles$/," mile"); // "first 5K race", "first 2 mile race", "first mile time trial"
+  R.secs.forEach(s=>{
+    L.push("",s.label);
+    s.rows.forEach(x=>{const n=x.b==="PR"?`PR, −${gapTxt(x.by)}`:x.b==="SB"?`season best${x.by?`, −${gapTxt(x.by)}`:""}`:x.b==="First"?`first ${dist(s.dl)} ${x.r.kind==="tt"?"time trial":"race"}`:"";
+      L.push(`${x.tp}. ${x.a.name} ${fmtRace(x.sec)}${x.place?` · ${ord(x.place)} overall`:""}${n?` (${n})`:""}`)});
+    const sum=rcSum(s); if(sum.length) L.push(sum.join(" · "));
+  });
+  const team=[R.prs?`${R.prs} PR${R.prs===1?"":"s"}`:"", R.sbs?`${R.sbs} season best${R.sbs===1?"":"s"}`:""].filter(Boolean);
+  if(team.length) L.push("",`Team: ${team.join(", ")}`);
+  return L.join("\n");
 }
 
 /* ============ text exports ============ */
