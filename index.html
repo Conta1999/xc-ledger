@@ -85,8 +85,9 @@ button{cursor:pointer}
 
 /* tab bar */
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px))}
-.tabs-in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr)}
-.tab{background:none;border:0;padding:6px 0 4px;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--muted);font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.tabs-in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+.tab{background:none;border:0;padding:6px 0 4px;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--muted);font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;min-width:0;white-space:nowrap}
+@media (max-width:359px){.tab{letter-spacing:0;font-size:10.5px}}
 .tab svg{width:24px;height:24px}
 .tab[aria-current="page"]{color:var(--pine)}
 
@@ -208,6 +209,30 @@ table.t td .s{display:block;color:var(--muted);font-size:11.5px}
 .woloop input{flex:none;width:96px;min-height:40px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:8px 12px;font-size:16px}
 .woloop .small{flex:1;min-width:0}
 .grouphead{padding:8px 14px;background:var(--sunk);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+
+/* meets: list, results entry grid, paste preview */
+.entry .name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ehead,.erow{display:grid;grid-template-columns:minmax(0,1fr) 92px 56px;gap:8px;align-items:center;padding:8px 10px 8px 14px}
+.ehead{padding-top:10px;padding-bottom:4px}
+.ehead span+span{text-align:center}
+.erow{border-top:1px solid var(--line)}
+.erow .name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.erow .small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.erow input{width:100%;min-width:0;min-height:42px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 4px;font:500 16px/1.2 var(--f-num);text-align:center;scroll-margin:96px 0 160px}
+.erow input[aria-invalid="true"]{border-color:var(--bad);box-shadow:0 0 0 1px var(--bad)}
+.erow .eerr{grid-column:1/-1;margin:0;font-size:12.5px;line-height:1.35;color:var(--bad)}
+.efoot{position:sticky;bottom:calc(65px + env(safe-area-inset-bottom,0px));z-index:4;margin-top:6px;padding:14px 16px 8px;background:linear-gradient(to bottom,transparent,var(--bg) 14px);display:flex;flex-direction:column;gap:6px}
+.efoot p{margin:0;font-size:12.5px;color:var(--muted);text-align:center}
+.efoot p.bad{color:var(--bad)}
+#eAdj{appearance:textfield;-moz-appearance:textfield}
+#eAdj::-webkit-inner-spin-button,#eAdj::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.check{display:flex;gap:10px;align-items:center;font-weight:600;min-height:40px}
+.check input{width:20px;height:20px;flex:none;accent-color:var(--pine)}
+.prow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,46%);gap:10px;align-items:center;padding:10px 10px 10px 14px;border-top:1px solid var(--line)}
+.prow:first-child{border-top:0}
+.prow .name{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prow select{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:9px 8px;font-size:16px;min-width:0;width:100%;min-height:42px}
+.field textarea.ptext{min-height:150px;font-size:16px;white-space:pre;overflow-wrap:normal;overflow-x:auto}
 
 /* sheet */
 .scrim{position:fixed;inset:0;background:rgba(10,16,13,.45);z-index:40;opacity:0;transition:opacity .2s}
@@ -453,6 +478,11 @@ async function put(coll,id,data){
   lsSave();
   render();
 }
+// Many writes [[coll,id,data],…] with one save, so a 60-runner meet doesn't save 60 times. The caller renders once.
+function putBatch(writes){
+  writes.forEach(([coll,id,data])=>{const body={...data}; delete body.id; S[coll][id]={...body,id}});
+  return lsSave();
+}
 async function del(coll,id){
   delete S[coll][id];
   lsSave();
@@ -486,6 +516,7 @@ const WO_SECS = [60,90,120,180,240,300,360,480,600,720,900,1200]; // timed reps 
 const U = {view:"roster", athlete:null, q:"", grp:"All", gender:"all", sort:"rating", atab:"paces", rep:400, swNew:false, sfHelp:false,
   wo:{zone:5, rep:1000, grp:"All", gender:"all", mode:"dist", sec:180, loop:""},
   rlast:null, // last logged result: distance, type, meet, date (prefills the next one)
+  drafts:{}, ek:"new", // results entry drafts, in memory only: "new" or the key of the meet being edited
   calc:{dist:"5k", meters:"", time:"", gender:"m"}};
 try{const s=JSON.parse(localStorage.getItem("xc-ledger-ui")||"{}");if(s.wo)Object.assign(U.wo,s.wo);if(s.rep)U.rep=s.rep;if(s.sort)U.sort=s.sort;
   if(s.ps&&Array.isArray(s.ps.cols)){const cols=s.ps.cols.filter(psColOK).map(c=>c.k==="race"?{k:"race",dk:c.dk,show:c.show}:c).slice(0,4);U.ps={...JSON.parse(JSON.stringify(PS_DEF)),...s.ps,cols:cols.length?cols:JSON.parse(JSON.stringify(PS_DEF.cols))}}
@@ -499,6 +530,8 @@ function saveUI(){try{localStorage.setItem("xc-ledger-ui",JSON.stringify({wo:U.w
 
 const I = {
   roster:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c.6-3.4 3-5.4 6-5.4s5.4 2 6 5.4"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14.2c2.4.2 4 1.9 4.5 4.8"/></svg>',
+  meets:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V3.5"/><path d="M5 4h12.5l-2.6 4.2 2.6 4.3H5"/></svg>',
+  paste:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2.5" width="8" height="4" rx="1"/><path d="M16 4.5h1.5a2 2 0 0 1 2 2V19a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2H8M8.5 11.5h7M8.5 15.5h5"/></svg>',
   workout:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M10 2h4M12 2v3"/></svg>',
   calc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2.5"/><path d="M8.5 7h7M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01M8.5 15h.01M12 15h.01M15.5 15v2.5M8.5 18h.01M12 18h.01"/></svg>',
   plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
@@ -516,13 +549,15 @@ function render(){
   const app=$("#app");
   let html="";
   if(U.athlete && S.athletes[U.athlete]) html=viewAthlete(S.athletes[U.athlete]);
-  else { U.athlete=null; html = U.view==="roster"?viewRoster(): U.view==="workout"?viewWorkout(): viewCalc(); }
+  else { U.athlete=null; if(U.view==="entry"&&!draft()) U.view="meets";
+    html = U.view==="roster"?viewRoster(): U.view==="meets"?viewMeets(): U.view==="entry"?viewEntry(): U.view==="workout"?viewWorkout(): viewCalc(); }
   // Preserve focus on calc/search inputs across re-render
   const fid=document.activeElement?.id, sel=[document.activeElement?.selectionStart,document.activeElement?.selectionEnd];
   app.innerHTML=html;
   if(fid){const el=document.getElementById(fid); if(el&&el.tagName==="INPUT"){el.focus(); try{el.setSelectionRange(sel[0],sel[1])}catch{}}}
-  $("#tabs").innerHTML=[["roster","Roster"],["workout","Workout"],["calc","Calculator"]].map(([k,l])=>
-    `<button class="tab" data-act="tab" data-v="${k}" ${U.view===k&&!U.athlete?'aria-current="page"':''}>${I[k]}${l}</button>`).join("");
+  const cur=U.view==="entry"?"meets":U.view;
+  $("#tabs").innerHTML=[["roster","Roster"],["meets","Meets"],["workout","Workout"],["calc","Calculator"]].map(([k,l])=>
+    `<button class="tab" data-act="tab" data-v="${k}" ${cur===k&&!U.athlete?'aria-current="page"':''}>${I[k]}${l}</button>`).join("");
   if(U.view==="calc"&&!U.athlete) renderCalcOut();
 }
 
@@ -718,6 +753,327 @@ function woOut(){
     ${rows.length?`<button class="btn ghost block" data-act="copyWorkout">${I.copy}Copy split sheet</button>`:""}`;
 }
 
+/* ============ meets: race and time-trial results grouped by date and meet name ============ */
+const inMeet = r => !!S.athletes[r.athleteId] && ["race","tt"].includes(r.kind||"race"); // no estimates or workouts
+const meetKey = r => `${r.date||""}|${String(r.meet||"").trim().replace(/\s+/g," ").toLowerCase()}`;
+const dkey = r => r.distKey==="custom" ? "c"+r.meters : r.distKey;
+const condKey = r => {const c=condOf(r); return COND.filter(x=>c.includes(x)).join("|")};
+const mode = xs => {const n=new Map(); let b=xs[0]; xs.forEach(x=>n.set(x,(n.get(x)||0)+1)); n.forEach((c,x)=>{if(c>n.get(b)) b=x}); return b}; // most common value
+function meetList(){ // newest first
+  const M={};
+  Object.values(S.results).forEach(r=>{if(!inMeet(r)) return; const k=meetKey(r);
+    (M[k]||(M[k]={key:k,date:r.date||"",name:String(r.meet||"").trim(),rs:[]})).rs.push(r)});
+  return Object.values(M).sort((a,b)=>b.date.localeCompare(a.date)||a.name.localeCompare(b.name));
+}
+function meetGet(k){const rs=Object.values(S.results).filter(r=>inMeet(r)&&meetKey(r)===k);
+  return rs.length?{key:k,date:rs[0].date||"",name:String(rs[0].meet||"").trim(),rs}:null}
+const meetName = m => m.name || (m.rs.every(r=>r.kind==="tt")?"Time trial":"Race");
+
+function viewMeets(){
+  const ms=meetList(), nd=U.drafts.new, nt=nd?entryFilled(nd).length:0;
+  const head=`<header class="top"><div style="flex:1;min-width:0"><div class="sub">Season results</div><h1>Meets</h1></div>
+    <button class="btn" data-act="entryNew">${I.plus}Enter results</button></header>`;
+  const resume=nt?`<div class="notice"><span style="flex:1;min-width:0">${nt} unsaved time${nt===1?"":"s"}${nd.meet.trim()?` for ${esc(nd.meet.trim())}`:""}.</span><button data-act="entryNew">Continue</button></div>`:"";
+  if(!ms.length) return head+`<div class="wrap stack">${banners()}${resume}
+    <div class="card empty"><h2>No meets yet</h2>
+      <p>Enter a whole meet at once: type each runner's time, or paste the results from Athletic.net. Every runner's ledger and training paces update together.</p>
+      <button class="btn block" data-act="entryNew">${I.plus}Enter results</button></div></div>`;
+  const yrs=new Set(ms.map(m=>m.date.slice(0,4))).size>1; let yr="";
+  return head+`<div class="wrap stack">${banners()}${resume}
+    <div class="label">${ms.length} meet${ms.length===1?"":"s"}</div>
+    <div class="list">${ms.map(m=>{const p=dparts(m.date), n=new Set(m.rs.map(r=>r.athleteId)).size, cond=COND.filter(c=>m.rs.some(r=>condOf(r).includes(c)));
+      const dists=[...new Set(m.rs.map(distLabel))], tt=m.rs.every(r=>r.kind==="tt"), y=m.date.slice(0,4), gh=yrs&&y!==yr?`<div class="grouphead">${esc(y)}</div>`:""; yr=y;
+      return gh+`<button class="entry" data-act="openMeet" data-v="${esc(m.key)}">
+        <div class="date"><div class="mo">${p.mo}</div><div class="dy">${p.dy}</div></div>
+        <div style="min-width:0"><div class="name">${esc(meetName(m))}</div>
+          <div class="small">${esc(dists.join(" · "))}${tt?" · Time trial":""}</div>
+          ${cond.length?`<div class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cond.join(" · "))}</div>`:""}</div>
+        <div class="right"><div class="big">${n}</div><div class="small">runner${n===1?"":"s"}</div></div></button>`}).join("")}</div>
+    <p class="small" style="margin:0">Tap a meet to fix times or add runners. Estimates don't count as meets, so they aren't listed.</p>
+  </div>`;
+}
+
+/* ============ results entry: one meet, every runner on one page ============ */
+const draft = () => U.drafts[U.ek]||null;
+const entryKm = d => d.dist==="custom" ? (Math.round(+d.meters)||0)/1000 : DMAP[d.dist]?.km;
+const entryDl = d => d.dist==="custom" ? (+d.meters?`${Math.round(+d.meters)}m`:"custom distance") : DMAP[d.dist]?.label||d.dist;
+const entryShow = (d,a) => (d.grp==="All"||a.group===d.grp)&&(d.gender==="all"||a.gender===d.gender);
+// A saved time as entry text, keeping tenths or hundredths ("16:58.2"), so an untouched row saves exactly as it was
+const tStr = s => {let dec=0; while(dec<3&&Math.abs(Math.round(s*10**dec)/10**dec-s)>1e-6) dec++; return maskTime(fmt(s,dec))};
+function entryDraft(key){ // a fresh draft: a blank meet, or the saved meet `key` to edit
+  const base={key:key||null, grp:"All", gender:"all", basis:true, kind:"race", cond:[], adj:"", t:{}, p:{}, chk:{}, ids:{}, extra:[], paste:""};
+  if(!key){const L=U.rlast, dist=L&&DMAP[L.dist]?L.dist:"5k";
+    return {...base, meet:"", date:today(), dist, meters:dist==="custom"?String(L.meters||""):""}}
+  const m=meetGet(key); if(!m) return null;
+  const rs=m.rs.slice().sort((x,y)=>(x.created||0)-(y.created||0)), d={...base, key, title:meetName(m), meet:m.name, date:m.date};
+  rs.forEach(r=>{const aid=r.athleteId; if(d.ids[aid]) return d.extra.push(r.id); // a second result for the same runner stays as it is
+    d.ids[aid]=r.id; d.t[aid]=tStr(+r.seconds); d.chk[aid]=true; if(+r.place>0) d.p[aid]=String(+r.place)});
+  // The meet's settings are what most of its results share. A result with its own setting keeps it unless the coach changes that setting.
+  const o=d.o={dist:mode(rs.map(dkey)), kind:mode(rs.map(r=>r.kind||"race")), adj:+mode(rs.map(r=>String(+r.adj||0))), cond:mode(rs.map(condKey))};
+  const r0=rs.find(r=>dkey(r)===o.dist);
+  return Object.assign(d,{dist:r0.distKey, meters:r0.distKey==="custom"?String(r0.meters||""):"", kind:o.kind, adj:o.adj?String(o.adj):"", cond:o.cond?o.cond.split("|"):[], t0:{...d.t},
+    basis:Object.values(d.ids).every(id=>basisOf(S.athletes[S.results[id].athleteId])?.id===id)}); // re-pin paces only if this meet already sets them
+}
+function entryOpen(key){
+  const k=key||"new", had=U.drafts[k];
+  if(had&&had.dirty) had.resumed=true; else U.drafts[k]=entryDraft(key);
+  if(!U.drafts[k]){delete U.drafts[k]; toast("That meet has no results anymore."); return}
+  U.ek=k; U.view="entry"; U.athlete=null; render(); scrollTo(0,0);
+}
+// Every runner, fastest first; runners without results at the bottom
+function entryRows(d){
+  return Object.values(S.athletes).filter(a=>entryShow(d,a)).map(a=>({a,c:athleteCalc(a)}))
+    .sort((x,y)=>(!!y.c-!!x.c)||(y.c?.rating||0)-(x.c?.rating||0)||x.a.name.localeCompare(y.a.name));
+}
+// [distKey, meters] a row saves with: the meet's distance, unless an edited result had a different one
+function rowDist(d,aid){const r=S.results[d.ids[aid]];
+  return r&&d.o&&dkey(r)!==d.o.dist ? [r.distKey,r.meters] : [d.dist, d.dist==="custom"?Math.round(+d.meters)||null:null]}
+function entryErr(d,aid){
+  const raw=String(d.t[aid]||"").trim(); if(!raw) return "";
+  const [dk,m]=rowDist(d,aid); return timeErr(raw, dk==="custom"?(+m||0)/1000:DMAP[dk]?.km, dk==="custom"?`${m}m`:DMAP[dk]?.label||dk);
+}
+const entryFilled = d => Object.keys(S.athletes).filter(aid=>String(d.t[aid]||"").trim());
+// n: times ready to save; bad: checked times that need fixing; rm: times cleared from an edited meet; hid: filled rows the filter hides
+function entryTally(d){
+  let n=0,bad=0,hid=0;
+  entryFilled(d).forEach(aid=>{if(!entryShow(d,S.athletes[aid])) hid++; if(!entryErr(d,aid)) n++; else if(d.chk[aid]) bad++});
+  const rm=Object.entries(d.ids).filter(([aid,id])=>S.results[id]&&S.athletes[aid]&&!String(d.t[aid]||"").trim()).length;
+  return {n,bad,rm,hid};
+}
+function entryNotes(d){const {bad,rm,hid}=entryTally(d), x=[];
+  if(rm) x.push(`${rm} cleared time${rm===1?"":"s"} will move to Trash.`);
+  if(hid) x.push(`Includes ${hid} time${hid===1?"":"s"} hidden by the filter.`);
+  return (bad?`<p class="bad">${bad} time${bad===1?" needs":"s need"} fixing. ${bad===1?"It's":"They're"} marked in red.</p>`:"")+(x.length?`<p>${x.join(" ")}</p>`:"")}
+const entrySaveLabel = t => t.n?`Save ${nResults(t.n)}`:t.rm?`Remove ${nResults(t.rm)}`:"Save results";
+// Update the sticky footer in place (the Save button stays the same element, so a tap that blurs a time field still lands)
+function entryFoot(){const d=draft(), nb=$("#eNotes"), b=$("#eSave"); if(!d||!b) return; const t=entryTally(d);
+  nb.innerHTML=entryNotes(d); b.textContent=entrySaveLabel(t); b.disabled=!t.n&&!t.rm}
+function entryMark(aid){ // show or clear one row's time error
+  const d=draft(), el=document.getElementById("et-"+aid), p=document.getElementById("ee-"+aid); if(!d||!el||!p) return;
+  const err=d.chk[aid]?entryErr(d,aid):"";
+  if(err) el.setAttribute("aria-invalid","true"); else el.removeAttribute("aria-invalid");
+  p.textContent=err; p.hidden=!err;
+}
+function entryDupHTML(d){ // this name and date already have results: saving adds to them
+  if(!String(d.meet).trim()) return "";
+  const k=meetKey(d), m=k!==d.key&&meetGet(k); if(!m) return "";
+  return `<div class="notice"><span style="flex:1;min-width:0">${esc(meetName(m))} on ${fmtDate(m.date)} already has results for ${nRunners(new Set(m.rs.map(r=>r.athleteId)).size)}. Saving adds these times to it and replaces the time of anyone already in it.</span><button data-act="editMeet" data-v="${esc(k)}">Edit it</button></div>`;
+}
+function viewEntry(){
+  const d=draft(), edit=!!d.key, gs=groups(), all=Object.keys(S.athletes).length;
+  if(d.grp!=="All"&&!gs.includes(d.grp)) d.grp="All";
+  const rows=entryRows(d), t=entryTally(d), twice=[...new Set(d.extra.map(id=>S.results[id]?.athleteId))].filter(aid=>S.athletes[aid]).map(aid=>S.athletes[aid].name);
+  const head=`<header class="top"><button class="iconbtn" data-act="entryBack" aria-label="Back to meets">${I.back}</button>
+    <div style="flex:1;min-width:0"><div class="sub">${edit?"Edit results":"Meets"}</div><h1>${edit?esc(d.title):"Enter results"}</h1></div></header>`;
+  return head+`<div class="wrap stack">${banners()}
+    ${d.resumed?`<div class="notice"><span style="flex:1;min-width:0">Picking up where you left off. Nothing is saved until you tap Save.</span><button data-act="entryReset">Start over</button></div>`:""}
+    <div class="card stack">
+      <div class="field"><label class="label" for="eMeet">Meet name</label><input id="eMeet" value="${esc(d.meet)}" placeholder="Conference championships" autocomplete="off"></div>
+      <div class="fields" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+        <div class="field"><label class="label" for="eDate">Date</label><input id="eDate" type="date" value="${esc(d.date)}"></div>
+        <div class="field"><label class="label" for="eDist">Distance</label>${distSelect("eDist",d.dist)}</div>
+        <div class="field full" id="eMetersWrap" ${d.dist==="custom"?"":"hidden"}><label class="label" for="eMeters">Distance in meters</label><input id="eMeters" inputmode="numeric" value="${esc(d.meters)}" placeholder="4500" autocomplete="off"></div>
+      </div>
+      <div class="field"><span class="label">Type</span><div class="seg">${KINDS.filter(k=>k[0]!=="est").map(([k,l])=>`<button type="button" data-act="ekind" data-v="${k}" aria-pressed="${d.kind===k}">${l}</button>`).join("")}</div></div>
+      <div class="fields" style="align-items:end">
+        <div class="field"><label class="label" for="eAdj">Course adj. (sec)</label><input id="eAdj" type="number" step="any" value="${esc(d.adj)}" placeholder="-20" autocomplete="off" aria-describedby="eAdjHint"></div>
+        <p class="small" id="eAdjHint" style="margin:0;align-self:center">−20 if this course ran about 20 seconds slow. Paces use the adjusted time.</p>
+      </div>
+      <div class="field"><span class="label" id="eCondL">Conditions</span><div class="chips multi" role="group" aria-labelledby="eCondL">${COND.map(x=>`<button type="button" class="chip" data-act="econd" data-v="${x}" aria-pressed="${d.cond.includes(x)}">${x}</button>`).join("")}</div></div>
+      <label class="check"><input type="checkbox" id="eBasis" ${d.basis?"checked":""}> Update each runner's training paces</label>
+    </div>
+    <button class="pscta" data-act="pasteOpen"><span class="ico">${I.paste}</span>
+      <span style="min-width:0"><b>Paste results</b><span class="small" style="display:block">Copy the results table on Athletic.net or MileSplit, and your runners' times fill in.</span></span>
+      <span aria-hidden="true" style="color:var(--muted);font-size:22px">›</span></button>
+    <div id="eDup">${entryDupHTML(d)}</div>
+    ${twice.length?`<div class="notice">${esc(twice.join(", "))} ${twice.length===1?"has":"have"} two results in this meet. This page shows the first one. To fix or delete the other, open the runner's ledger.</div>`:""}
+    <div class="chips">${["All",...gs].map(g=>`<button class="chip" data-act="egrp" data-v="${esc(g)}" aria-pressed="${d.grp===g}">${esc(g)}</button>`).join("")}
+      <span style="width:1px;background:var(--line);flex:none"></span>
+      ${[["all","Everyone"],["f","Girls"],["m","Boys"]].map(([k,l])=>`<button class="chip" data-act="egender" data-v="${k}" aria-pressed="${d.gender===k}">${l}</button>`).join("")}</div>
+    <div class="list">${rows.length?`<div class="ehead label" aria-hidden="true"><span>${nRunners(rows.length)}</span><span>Time</span><span>Place</span></div>`+rows.map(({a,c})=>{
+      const id=esc(a.id), err=d.chk[a.id]?entryErr(d,a.id):"", [dk,m]=rowDist(d,a.id), own=dk!==d.dist||(dk==="custom"&&+m!==Math.round(+d.meters));
+      return `<div class="erow"><div style="min-width:0"><div class="name">${esc(a.name)}</div>
+        <div class="small">${c?`<span class="num">${fmtEq(Tin.equiv(5,c.t3k))}</span> 5K eq${estPace(c)?" · est.":""}`:"No results"}${own?` · ran ${esc(distLabel({distKey:dk,meters:m}))}`:""}</div></div>
+        <input id="et-${id}" class="tin" data-et="${id}" inputmode="decimal" enterkeyhint="next" autocomplete="off" value="${esc(d.t[a.id]||"")}" aria-label="${esc(a.name)} time" aria-describedby="ee-${id}"${err?' aria-invalid="true"':""}>
+        <input id="ep-${id}" data-ep="${id}" inputmode="numeric" pattern="[0-9]*" maxlength="4" enterkeyhint="next" autocomplete="off" value="${esc(d.p[a.id]||"")}" aria-label="${esc(a.name)} place">
+        <p class="eerr" id="ee-${id}"${err?"":" hidden"}>${esc(err)}</p></div>`}).join("")
+      :`<div class="empty"><p>${all?"No runners match these filters.":"No runners yet. Add your runners on the Roster tab, then enter their times here."}</p></div>`}</div>
+    <p class="small" style="margin:0">Type times without colons, like 1745 for 17:45. Blank rows are skipped. Place is optional.</p>
+  </div>
+  <div class="efoot" id="eFoot"><div id="eNotes">${entryNotes(d)}</div><p class="bad" id="eErr" role="alert" hidden></p>
+    <button class="btn block" id="eSave" data-act="entrySave" ${t.n||t.rm?"":"disabled"}>${entrySaveLabel(t)}</button></div>`;
+}
+// Keep the draft in step with the entry page (nothing is saved until Save)
+function entryInput(el){
+  const d=draft(); if(!d||U.view!=="entry"||!el.closest?.("#app")) return;
+  const id=el.id, et=el.dataset.et, ep=el.dataset.ep;
+  if(et!=null){d.t[et]=el.value; delete d.chk[et]; entryMark(et)}
+  else if(ep!=null){const v=el.value.replace(/\D/g,"").slice(0,4); if(v!==el.value) el.value=v; d.p[ep]=v}
+  else if(id==="eMeet"||id==="eDate"){d[id==="eMeet"?"meet":"date"]=el.value; const b=$("#eDup"); if(b) b.innerHTML=entryDupHTML(d)}
+  else if(id==="eMeters"){const v=el.value.replace(/\D/g,"").slice(0,6); if(v!==el.value) el.value=v; d.meters=v; Object.keys(d.chk).forEach(entryMark)}
+  else if(id==="eAdj") d.adj=el.value;
+  else return;
+  el.removeAttribute("aria-invalid"); d.dirty=true; const er=$("#eErr"); if(er) er.hidden=true; entryFoot();
+}
+function entrySave(){
+  const d=draft(); if(!d) return;
+  const fail=(msg,sel)=>{const p=$("#eErr"); if(p){p.textContent=msg;p.hidden=false} const f=sel&&$(sel); if(f){if(f.tagName==="INPUT")f.setAttribute("aria-invalid","true");f.focus()}};
+  const meet=String(d.meet).trim().replace(/\s+/g," "), meters=d.dist==="custom"?Math.round(+d.meters):null, adjS=String(d.adj).trim().replace("−","-"), adj=adjS?+adjS:0;
+  if(!meet) return fail("Enter the meet name, like Conference championships.","#eMeet");
+  if(!/^\d{4}-\d\d-\d\d$/.test(d.date)) return fail("Pick the meet date.","#eDate");
+  if(d.dist==="custom"&&!(meters>=100)) return fail("Enter the distance in meters, 100 or more.","#eMeters");
+  if(!isFinite(adj)) return fail("Course adjustment must be a number of seconds, like -20.","#eAdj");
+  const aids=entryFilled(d), bad=aids.filter(aid=>entryErr(d,aid));
+  if(bad.length){bad.forEach(aid=>{d.chk[aid]=true});
+    if(bad.some(aid=>!entryShow(d,S.athletes[aid]))){d.grp="All";d.gender="all"}
+    render(); const f=document.getElementById("et-"+bad[0]); if(f){f.focus({preventScroll:true});f.scrollIntoView({block:"center"})} // its error is read out with it
+    return;
+  }
+  if(!aids.length&&!entryTally(d).rm) return fail("Type at least one runner's time.");
+  const tk=meetKey({date:d.date,meet}), mine=new Set([...Object.values(d.ids),...d.extra]), there={};
+  (meetGet(tk)?.rs||[]).forEach(r=>{if(!mine.has(r.id)&&!there[r.athleteId]) there[r.athleteId]=r.id}); // already logged at this meet (e.g. on the result sheet): update it, don't add a second one
+  const o=d.o, now=Date.now(), W=[], saved=[];
+  // The meet's settings for one result. A result being edited that had its own setting keeps it.
+  const hdr=(r,own)=>{const k=own&&o&&r, od=k&&dkey(r)!==o.dist;
+    return {kind:k&&(r.kind||"race")!==o.kind?r.kind:d.kind, adj:k&&(+r.adj||0)!==o.adj?r.adj:adj, cond:k&&condKey(r)!==o.cond?condOf(r):d.cond,
+      distKey:od?r.distKey:d.dist, meters:od?r.meters:meters}};
+  const gone=Object.entries(d.ids).filter(([aid,id])=>S.results[id]&&!String(d.t[aid]||"").trim()).map(([,id])=>id);
+  gone.forEach(id=>trashResult(id,true)); // cleared times go to the trash (saved once below)
+  aids.forEach(aid=>{
+    const own=S.results[d.ids[aid]]?d.ids[aid]:null, id=own||there[aid]||uid(), r0=S.results[id], raw=String(d.t[aid]).trim(), h=hdr(r0,!!own);
+    const r={...(r0||{created:now,notes:""}),athleteId:aid,meet,date:d.date,...h,seconds:own&&raw===d.t0?.[aid]?+r0.seconds:parseTime(raw)};
+    if(h.cond.length) r.cond=[...h.cond]; else delete r.cond;
+    const pl=parseInt(d.p[aid],10); if(pl>0) r.place=pl; else if(own||!r0) delete r.place;
+    W.push(["results",id,r]); saved.push([aid,id]);
+  });
+  d.extra.forEach(id=>{const r0=S.results[id]; if(!r0) return; const h=hdr(r0,true), r={...r0,meet,date:d.date,...h};
+    if(h.cond.length) r.cond=[...h.cond]; else delete r.cond; W.push(["results",id,r])});
+  if(d.basis) saved.forEach(([aid,id])=>{const a=S.athletes[aid]; if(a.basisId!==id) W.push(["athletes",aid,{...a,basisId:id}])});
+  const ok=putBatch(W);
+  U.rlast={dist:d.dist,meters:meters||"",kind:d.kind,meet,date:d.date,at:now}; saveUI(); // the result sheet then prefills this meet
+  delete U.drafts[U.ek]; delete U.drafts[tk];
+  U.view="meets"; render(); scrollTo(0,0); // B4: open this meet's detail instead
+  if(ok) toast([saved.length?`Saved ${nResults(saved.length)}`:"",gone.length?`${gone.length} moved to Trash`:""].filter(Boolean).join(" · "));
+}
+// Drafts of edited meets point at saved results; drop them when all the data is replaced
+function entryForget(){Object.keys(U.drafts).forEach(k=>{if(k!=="new") delete U.drafts[k]})}
+
+/* ============ paste results from Athletic.net or MileSplit ============ */
+// Name words for matching: lowercase, no accents or punctuation, hyphenated parts split ("O'Brien-Díaz, Ana" → "obrien diaz ana")
+const normName = s => String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/['’`]/g,"").replace(/[^\p{L}]+/gu," ").trim();
+const PASTE_SKIP = new Set(["pr","sb","sr","jr","so","fr","dnf","dns","dq","place","name","athlete","grade","yr","team","school","time","pace","mark"]);
+const PLACE_RE = /^\d{1,4}\.?$/;
+const pasteFields = s => s.split(/\t|\s{2,}/).map(f=>f.trim()).filter(Boolean);
+const isNameField = f => !f.includes(":")&&/\p{L}{2}/u.test(f)&&!PASTE_SKIP.has(normName(f));
+const nameRun = s => {const m=s.replace(/^\s*\d{1,4}[.)]?\s+/,"").match(/\p{L}[\p{L}'’.\-]+(?:,?\s+\p{L}[\p{L}'’.\-]*)*/u);
+  return m&&!PASTE_SKIP.has(normName(m[0]))?m[0].replace(/[,.\s]+$/,""):""};
+// The runner's name as written on a line. joined: a record pieced together from short lines, where it follows the place.
+function pasteName(rec,joined){
+  const fs=pasteFields(rec);
+  if(fs.length<2) return nameRun(rec);
+  const i=joined?fs.findIndex(f=>PLACE_RE.test(f)):-1, f=fs.find((f,k)=>k>i&&isNameField(f));
+  return f?nameRun(f):"";
+}
+function pastePlace(rec,joined){ // the leading number, if any
+  const f=joined&&pasteFields(rec).find(x=>PLACE_RE.test(x)), m=f?[0,f]:rec.match(/^\s*(\d{1,4})(?:[.)]|\s|$)/), n=m?parseInt(m[1],10):0;
+  return n>0?n:null;
+}
+// The largest h:mm:ss or m:ss(.d) on a line that is believable for the race distance (skips per-mile paces and clock times)
+function pasteTime(rec,km){
+  let best=null;
+  for(const m of rec.matchAll(/(^|[^\d:.])((?:\d{1,2}:)?\d{1,2}:\d\d(?:\.\d{1,3})?)(?![\d:])/g)){
+    const s=parseTime(m[2]); if(s>0&&(!km||paceOK(s,km))&&(!best||s>best.sec)) best={sec:s,tok:m[2]};
+  }
+  return best;
+}
+function pasteKeys(){ // each runner's first and last name parts ("Ana María Lopez-Garcia Jr." → [ana], [lopez, garcia])
+  return Object.values(S.athletes).map(a=>{
+    let w=String(a.name||"").replace(/^Sample · /,"").trim().split(/\s+/).map(normName).filter(Boolean);
+    if(w.length>2&&/^(jr|sr|ii|iii|iv)$/.test(w[w.length-1])) w=w.slice(0,-1);
+    return {id:a.id, first:(w[0]||"").split(" "), last:w.length>1?w[w.length-1].split(" "):[], full:w.join(" ")};
+  }).filter(k=>k.full);
+}
+// The roster runner a pasted line is about: a remembered name first, then first and last name both on the line (longest match wins)
+function pasteFind(rec,name,keys){
+  const nk=normName(name), al=S.aliases[nk];
+  if(nk&&al&&S.athletes[al]) return {aid:al,alias:true};
+  const toks=normName(rec).split(" "), set=new Set(toks), ln=` ${toks.join(" ")} `, lastFirst=/\p{L},\s*\p{L}/u.test(rec);
+  const has=p=>p.every(x=>set.has(x))||set.has(p.join(""));
+  let best=null,bs=0,tie=false;
+  keys.forEach(k=>{
+    if(k.last.length ? !(has(k.first)&&has(k.last)) : nk!==k.full) return; // one-word names must match exactly
+    let s=k.full.split(" ").filter(x=>set.has(x)).join("").length;
+    if(ln.includes(` ${(lastFirst?[...k.last,...k.first]:[...k.first,...k.last]).join(" ")} `)) s+=.5; // written in name order
+    if(s>bs){best=k.id;bs=s;tie=false} else if(s===bs) tie=true;
+  });
+  return best&&!tie?{aid:best}:null;
+}
+// Lines with a believable time become rows. A time on a line with no name (one cell per line) takes the short lines before it.
+function pasteParse(text,km){
+  const keys=pasteKeys(), out=[], buf=[], used=new Set();
+  String(text||"").split(/\r\n|\r|\n/).forEach(raw=>{
+    const line=raw.replace(/ /g," ").trim(); if(!line) return;
+    const t=pasteTime(line,km);
+    if(!t){buf.push(line); if(buf.length>6) buf.shift(); return}
+    let rec=line, joined=false;
+    if(buf.length){const all=[...buf,line].join("\t"), nm=pasteName(line,false);
+      if(!nm||(!pasteFind(line,nm,keys)&&pasteFind(all,pasteName(all,true),keys))){rec=all;joined=true}}
+    buf.length=0;
+    const name=pasteName(rec,joined), m=pasteFind(rec,name,keys), dup=!!m&&used.has(m.aid);
+    if(m&&!dup) used.add(m.aid);
+    out.push({rec, sec:t.sec, tok:t.tok, place:pastePlace(rec,joined), name, key:normName(name), aid:m&&!dup?m.aid:"", alias:!!m?.alias&&!dup, dup});
+  });
+  return out;
+}
+const pastePk = r => SH?.pick && r.rec in SH.pick ? SH.pick[r.rec] : r.aid; // the coach's choice, else the match
+function pasteN(){const u=new Set(); (SH?.rows||[]).forEach(r=>{const v=pastePk(r); if(v&&S.athletes[v]) u.add(v)}); return u.size}
+const pasteBtnLabel = n => n?`Fill ${n} time${n===1?"":"s"}`:"Fill times";
+function pasteBtn(){const b=$("#pFill"); if(!b) return; const n=pasteN(); b.disabled=!n; b.textContent=pasteBtnLabel(n)}
+function pasteOpts(){
+  const as=Object.values(S.athletes).sort((x,y)=>x.name.localeCompare(y.name)), o=f=>as.filter(f).map(a=>`<option value="${esc(a.id)}">${esc(a.name)}</option>`).join("");
+  return `<option value="">Skip</option><optgroup label="Girls">${o(a=>a.gender==="f")}</optgroup><optgroup label="Boys">${o(a=>a.gender!=="f")}</optgroup>`;
+}
+function pasteOut(){
+  const s=SH, d=draft(); if(s?.type!=="paste"||!d) return "";
+  if(!String(s.text||"").trim()) return `<p class="small" style="margin:0">Rows can be tab- or space-separated, with names as First Last or Last, First. Tables that paste one cell per line work too. Other teams' runners are skipped.</p>`;
+  const rows=s.rows||[];
+  if(!rows.length) return `<div class="notice">No times that fit ${esc(entryDl(d))} were found. Copy the whole results table, or go back and check the distance.</div>`;
+  const opts=pasteOpts(), hit=[], miss=[]; rows.forEach((r,i)=>(r.aid?hit:miss).push(i));
+  const row=i=>{const r=rows[i], v=esc(pastePk(r));
+    return `<div class="prow"><div style="min-width:0"><div class="name">${r.place?`${r.place}. `:""}${esc(r.name||"No name found")}</div>
+      <div class="small"><span class="num">${esc(r.tok)}</span>${r.alias?" · remembered":""}${r.dup?" · same runner as a line above":""}</div></div>
+      <select id="pk-${i}" aria-label="Runner for ${esc(r.name||`line ${i+1}`)}">${opts.replace(`value="${v}"`,`value="${v}" selected`)}</select></div>`};
+  return `<p class="small" style="margin:0"><b>${hit.length} of ${rows.length}</b> time${rows.length===1?"":"s"} matched your roster. Check each match, and pick a runner for any line that didn't match.</p>
+    ${hit.length?`<div class="list">${hit.map(row).join("")}</div>`:""}
+    ${miss.length?(s.more||!hit.length?`<div class="label">Didn't match · ${miss.length}</div><div class="list">${miss.map(row).join("")}</div>`
+      :`<button type="button" class="btn ghost block" data-act="pasteMore">Show ${miss.length} line${miss.length===1?"":"s"} that didn't match</button>`):""}`;
+}
+function pasteRead(){const d=draft(); if(SH?.type!=="paste"||!d) return; d.paste=SH.text; SH.rows=pasteParse(SH.text,entryKm(d));
+  const o=$("#pOut"); if(o) o.innerHTML=pasteOut(); pasteBtn()}
+function pastePick(i,aid){ // a runner goes with one line only: picking them here clears them from any other line
+  const rows=SH?.rows||[], r=rows[i]; if(!r) return; SH.pick[r.rec]=aid;
+  if(aid) rows.forEach((x,k)=>{if(k!==i&&pastePk(x)===aid){SH.pick[x.rec]=""; const el=document.getElementById("pk-"+k); if(el) el.value=""}});
+  pasteBtn();
+}
+// Copy the chosen times into the entry page (not saved yet) and remember names the coach matched by hand
+function pasteFill(){
+  const d=draft(); if(!d||SH?.type!=="paste") return;
+  const picks=[], seen=new Set();
+  (SH.rows||[]).forEach(r=>{const aid=pastePk(r); if(aid&&S.athletes[aid]&&!seen.has(aid)){seen.add(aid); picks.push([r,aid])}});
+  if(!picks.length) return;
+  const lbl="Before pasting results", last=snapList()[0]; // girls' then boys' tables: one snapshot, so older ones aren't pushed out
+  if(!(last&&last.label===lbl&&Date.now()-last.at<15*60e3)) snapshot(lbl);
+  let al=false;
+  SH.rows.forEach(r=>{if(!r.key||!(r.rec in SH.pick)) return; const v=SH.pick[r.rec];
+    if(v&&v!==r.aid&&S.athletes[v]){S.aliases[r.key]=v; al=true}
+    else if(!v&&r.alias){delete S.aliases[r.key]; al=true}}); // a remembered match the coach turned off
+  if(al) lsSave();
+  picks.forEach(([r,aid])=>{d.t[aid]=maskTime(r.tok); if(r.place) d.p[aid]=String(r.place); d.chk[aid]=true});
+  if(picks.some(([,aid])=>!entryShow(d,S.athletes[aid]))){d.grp="All"; d.gender="all"}
+  d.dirty=true; closeSheet(); render();
+  toast(`Filled ${picks.length} time${picks.length===1?"":"s"}. Check them, then tap Save.`);
+}
+
 function viewCalc(){
   const k=U.calc;
   return `<header class="top"><div style="flex:1;min-width:0"><div class="sub">Tinman · Tom Schwartz</div><h1>Pace Calculator</h1></div></header>
@@ -766,7 +1122,7 @@ function openSheet(s){
   psGen++; psClear(); SH=s; const root=$("#sheetRoot");
   root.innerHTML=`<div class="scrim" data-act="closeSheet"></div><div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div>${sheetHTML(s)}</div>`;
   requestAnimationFrame(()=>{root.querySelector(".scrim").classList.add("on");root.querySelector(".sheet").classList.add("on")});
-  const f=root.querySelector("input:not([type=hidden]),select"); if(f&&!["copy","pacesheet","settings"].includes(s.type)) setTimeout(()=>f.focus({preventScroll:true}),260);
+  const f=root.querySelector("input:not([type=hidden]),select"); if(f&&!["copy","pacesheet","settings","paste"].includes(s.type)) setTimeout(()=>f.focus({preventScroll:true}),260);
 }
 function rerenderSheet(){const sh=document.querySelector("#sheetRoot .sheet");if(!sh||!SH) return;const st=sh.scrollTop;sh.innerHTML='<div class="grab"></div>'+sheetHTML(SH);sh.scrollTop=st}
 function closeSheet(){psGen++;psClear();const root=$("#sheetRoot");const sh=root.querySelector(".sheet");if(!sh){SH=null;return}
@@ -860,6 +1216,15 @@ function sheetHTML(s){
       <div id="psOut" class="stack">${s.imgs?psPreviewHTML(s.imgs):""}</div>
     </div>
     <div class="actions"><button type="button" class="btn ghost" data-act="closeSheet">Done</button></div>`;}
+  if(s.type==="paste"){const d=draft(), n=pasteN();
+    return `<h2>Paste results</h2>
+    <p class="small" style="margin:-6px 0 14px" id="pHelp">Copy the results table on Athletic.net or MileSplit, then paste here.</p>
+    <div class="field"><label class="label" for="pText">Results</label>
+      <textarea id="pText" class="ptext" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" aria-describedby="pHelp pHint" placeholder="1  Jordan Lee  12  Lincoln HS  16:58.20">${esc(s.text)}</textarea>
+      <span class="hint" id="pHint">Times are read as ${esc(d?entryDl(d):"race")} results. Nothing is saved until you tap Save on the entry page.</span></div>
+    <div id="pOut" class="stack" style="margin-top:14px">${pasteOut()}</div>
+    <div class="actions" style="position:sticky;bottom:calc(-20px - env(safe-area-inset-bottom,0px));margin:16px -16px calc(-20px - env(safe-area-inset-bottom,0px));padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));background:var(--bg)">
+      <button type="button" class="btn ghost" data-act="closeSheet">Cancel</button><button type="button" class="btn" id="pFill" data-act="pasteFill" ${n?"":"disabled"}>${pasteBtnLabel(n)}</button></div>`;}
   if(s.type==="copy") return `<h2>Copy text</h2><p class="small">Copying isn't allowed here. Select the text below and copy it.</p><textarea id="copyArea" style="width:100%;min-height:240px;border-radius:12px;border:1px solid var(--line);padding:12px;background:var(--surface);font:13px/1.5 var(--f-num)" readonly>${esc(s.text)}</textarea><div class="actions"><button class="btn" data-act="closeSheet">Done</button></div>`;
   return "";
 }
@@ -921,6 +1286,20 @@ document.addEventListener("click",e=>{
     case "wgrp": U.wo.grp=v; saveUI(); render(); break;
     case "wgender": U.wo.gender=v; saveUI(); render(); break;
     case "cgender": U.calc.gender=v; render(); break;
+    case "entryNew": entryOpen(null); break;
+    case "openMeet": entryOpen(v); break; // B4: open the meet's detail here
+    case "editMeet": entryOpen(v); break;
+    case "entryBack": U.view="meets"; render(); scrollTo(0,0); break;
+    case "entryReset": {const d=draft(); U.drafts[U.ek]=entryDraft(d?.key); render(); scrollTo(0,0); toast("Started over"); break;}
+    case "egrp": {const d=draft(); if(d){d.grp=v; render()} break;}
+    case "egender": {const d=draft(); if(d){d.gender=v; render()} break;}
+    case "ekind": {const d=draft(); if(!d) break; d.kind=v==="tt"?"tt":"race"; d.dirty=true; t.parentElement.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",b===t)); break;}
+    case "econd": {const d=draft(); if(!d) break; const on=!d.cond.includes(v); d.cond=COND.filter(c=>c===v?on:d.cond.includes(c)); d.dirty=true; t.setAttribute("aria-pressed",on); break;}
+    case "entrySave": entrySave(); break;
+    case "pasteOpen": {const d=draft(); if(!d) break; if(!Object.keys(S.athletes).length){toast("Add runners on the Roster tab first");break}
+      openSheet({type:"paste",text:d.paste,pick:{},rows:pasteParse(d.paste,entryKm(d))}); break;}
+    case "pasteMore": if(SH?.type==="paste"){SH.more=true; const o=$("#pOut"); if(o) o.innerHTML=pasteOut()} break;
+    case "pasteFill": pasteFill(); break;
     case "addAthlete": openSheet({type:"athlete"}); break;
     case "editAthlete": openSheet({type:"athlete",a:S.athletes[t.dataset.id]}); break;
     case "addResult": openSheet({type:"result",aid:U.athlete}); break;
@@ -951,7 +1330,7 @@ document.addEventListener("click",e=>{
     case "snapAsk": SH.snapAsk=+v; setRefresh('[data-act="snapKeep"]'); break;
     case "snapKeep": SH.snapAsk=null; setRefresh(); break;
     case "snapRestore": if(!snapRestore(+v)){SH.snapAsk=null; setRefresh(); toast("That snapshot is no longer saved. Pick another one."); break}
-      U.athlete=null; closeSheet(); render(); toast("Snapshot restored"); break;
+      U.athlete=null; entryForget(); closeSheet(); render(); toast("Snapshot restored"); break;
     case "copyPaces": copyText(pacesText(S.athletes[U.athlete])); break;
     case "copyWorkout": copyText(workoutText()); break;
     case "openPaceSheet": if(U.ps.grp!=="All"&&!groups().includes(U.ps.grp)){U.ps.grp="All";saveUI()} openSheet({type:"pacesheet"}); break;
@@ -972,7 +1351,7 @@ document.addEventListener("click",e=>{
     case "exportData": exportData(); break;
     case "doImport": {const d=SH&&SH.pending; if(!d) break; snapshot("Before restoring a backup");
       S.athletes=d.athletes; S.results=d.results; S.trash=trashMerge(d.trash); S.aliases=aliasesClean({...S.aliases,...(isObj(d.aliases)?d.aliases:{})});
-      lsSave(); U.athlete=null; closeSheet(); render(); toast("Backup restored"); break;}
+      lsSave(); U.athlete=null; entryForget(); closeSheet(); render(); toast("Backup restored"); break;}
     case "unseed": snapshot("Before removing sample runners"); // examples: no trash, but a snapshot just in case
       Object.values(S.athletes).filter(a=>a.sample).forEach(a=>{resultsFor(a.id).forEach(r=>delete S.results[r.id]);delete S.athletes[a.id]});
       lsSave(); render(); toast("Sample runners removed"); break;
@@ -981,6 +1360,8 @@ document.addEventListener("click",e=>{
 document.addEventListener("input",e=>{
   const id=e.target.id;
   if(e.target.classList?.contains("tin")){maskTin(e.target);e.target.removeAttribute("aria-invalid")}
+  if(U.view==="entry") entryInput(e.target);
+  if(id==="pText"&&SH?.type==="paste"){SH.text=e.target.value; clearTimeout(pasteRead.t); pasteRead.t=setTimeout(pasteRead,200)}
   if(id==="woLoop"){const v=e.target.value.replace(/\D/g,"").slice(0,5); if(v!==e.target.value) e.target.value=v;
     U.wo.loop=v; saveUI(); const o=$("#woOut"); if(o) o.innerHTML=woOut()}
   if(id==="q"){U.q=e.target.value;render()}
@@ -992,6 +1373,11 @@ document.addEventListener("change",e=>{
   const id=e.target.id;
   if(id==="cDist"){U.calc.dist=e.target.value;$("#cMetersWrap").hidden=e.target.value!=="custom";renderCalcOut()}
   if(id==="rDist"){$("#rMetersWrap").hidden=e.target.value!=="custom"}
+  const d=U.view==="entry"&&e.target.closest?.("#app")?draft():null;
+  if(d&&e.target.dataset.et!=null){const aid=e.target.dataset.et; if(String(e.target.value).trim()) d.chk[aid]=true; entryMark(aid); entryFoot()} // check a time once the coach moves on
+  if(d&&id==="eDist"){d.dist=e.target.value; d.dirty=true; render()}
+  if(d&&id==="eBasis"){d.basis=e.target.checked; d.dirty=true}
+  const pkm=/^pk-(\d+)$/.exec(id||""); if(pkm&&SH?.type==="paste") pastePick(+pkm[1],e.target.value);
   const pm=/^ps([ZD])(\d)$/.exec(id||"");
   if(pm&&U.ps.cols[+pm[2]]){const i=+pm[2], col=U.ps.cols[i], v=e.target.value, race=PS_SHOW.some(x=>x[0]===v);
     if(pm[1]==="Z") U.ps.cols[i] = race ? {k:"race",dk:col.k==="race"?col.dk:"5k",show:v} : {z:+v,m:col.k==="race"?1609.344:col.m}; // race plan or training zone
@@ -1034,6 +1420,10 @@ document.addEventListener("submit",async e=>{
 });
 addEventListener("scroll",()=>{const h=document.querySelector(".top");if(h)h.classList.toggle("scrolled",scrollY>4)},{passive:true});
 addEventListener("keydown",e=>{if(e.key==="Escape"&&SH)closeSheet()});
+// Results entry: Return / Next goes to the next runner's time
+addEventListener("keydown",e=>{const el=e.target; if(e.key!=="Enter"||e.isComposing||!el.dataset||(el.dataset.et==null&&el.dataset.ep==null)) return; e.preventDefault();
+  const all=[...document.querySelectorAll("#app [data-et]")], nx=all[all.findIndex(x=>x.closest(".erow")===el.closest(".erow"))+1];
+  if(nx){nx.focus({preventScroll:true}); nx.scrollIntoView({block:"nearest"})} else el.blur()});
 
 /* ============ team pace sheet (image export) ============ */
 const expDist = m => Math.abs(m-1609.344)<.5 ? "Mile" : `${m}m`;
