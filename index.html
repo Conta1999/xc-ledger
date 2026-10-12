@@ -40,6 +40,8 @@
   --chev:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2366666E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   /* warning icon for alerts, drawn as a mask in currentColor */
   --ic-alert:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7.5v5.5M12 16.5v.01'/%3E%3C/svg%3E");
+  /* trash icon on destructive confirms, so Delete never reads as just another colored pill */
+  --ic-trash:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2'/%3E%3C/svg%3E");
   --r-xs:6px; --r-field:12px; --r-md:16px; --r-alert:20px; --r-toast:22px; --r-card:24px; --r-pill:999px;
   --ease-out:cubic-bezier(0,0,.2,1); --ease-quart:cubic-bezier(.165,.84,.44,1); --ease-fluid:cubic-bezier(.32,.72,0,1);
   --f-body:"Inter",-apple-system,BlinkMacSystemFont,system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
@@ -67,6 +69,9 @@
 :root[data-accent="maroon"]{--acc-l:#7A1F2B;--acc-l-fg:#FCFCFC;--acc-l-ink:#7A1F2B;--acc-d:#E08A96;--acc-d-fg:#18181B;--acc-d-ink:#E08A96}
 :root[data-accent="orange"]{--acc-l:#C2410C;--acc-l-fg:#FCFCFC;--acc-l-ink:#9A3412;--acc-d:#FB923C;--acc-d-fg:#18181B;--acc-d-ink:#FB923C}
 :root[data-accent="gold"]{--acc-l:#E2A913;--acc-l-fg:#18181B;--acc-l-ink:#7A5600;--acc-d:#F2C230;--acc-d-fg:#18181B;--acc-d-ink:#F2C230}
+/* keep danger and warning apart from a red, orange or gold team color */
+:root[data-accent="red"],:root[data-accent="orange"]{--bad:#B8186A;--danger:#B8186A} /* raspberry (white text 6.2:1): Delete never matches a red or orange team's Save */
+:root[data-accent="gold"]{--warn-soft:color-mix(in oklab,#F97316 24%,var(--surface))} /* warnings lean orange beside gold team tints */
 /* dark: depth from tone (page #060607, surface #18181B, fill #27272A, selected segment #46464C) plus a hairline on overlays */
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#060607;--surface:#18181B;--surface-2:#232325;--overlay:#18181B;--sunk:#27272A;--sunk-2:#2E2E31;
@@ -94,6 +99,8 @@
   --accent:var(--acc-d);--accent-fg:var(--acc-d-fg);--accent-ink:var(--acc-d-ink);
   --accent-soft:color-mix(in oklab,var(--accent) 14%,var(--surface));
   color-scheme:dark}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]):is([data-accent="red"],[data-accent="orange"]){--bad:#F472B6;--danger:#BE185D}}
+:root[data-theme="dark"]:is([data-accent="red"],[data-accent="orange"]){--bad:#F472B6;--danger:#BE185D}
 
 /* ============ base ============ */
 *{box-sizing:border-box}
@@ -135,7 +142,7 @@ button{cursor:pointer}
 .top.scrolled{border-bottom-color:var(--sep)}
 .top h1{margin:0;min-width:0;font-size:26px;line-height:32px;font-weight:700;letter-spacing:-.025em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .top h1.mt{font-size:22px;line-height:28px;letter-spacing:-.02em;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere} /* a meet or runner name wraps so it always shows in full */
-.top .sub{font-size:13px;line-height:18px;font-weight:500;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top .sub{font-size:13px;line-height:18px;font-weight:500;color:color-mix(in oklab,var(--muted) 70%,var(--ink));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .top .btn{min-height:40px;padding:0 16px}
 @media (max-width:359px){
   .top h1{font-size:22px;line-height:28px}
@@ -166,8 +173,9 @@ button{cursor:pointer}
 .btn.ghost{background:var(--ctl);box-shadow:var(--ctl-sh);color:var(--ink)}             /* HeroUI tertiary */
 .btn.ghost:not(:disabled):active{background:color-mix(in oklab,var(--ctl) 92%,var(--ink))}
 .btn.danger{background:var(--danger-soft);color:var(--bad);box-shadow:none}
-.btn.danger:not(:disabled):active{background:color-mix(in oklab,var(--danger-soft) 88%,var(--bad))}
+.btn.danger:not(.solid):not(:disabled):active{background:color-mix(in oklab,var(--danger-soft) 88%,var(--bad));color:color-mix(in oklab,var(--bad) 70%,var(--ink))} /* darker text keeps 4.5:1 on the pressed tint */
 .btn.danger.solid{background:var(--danger);color:#fff}
+.btn.danger.solid::before{content:"";flex:none;width:18px;height:18px;background:currentColor;-webkit-mask:var(--ic-trash) center/contain no-repeat;mask:var(--ic-trash) center/contain no-repeat}
 .btn.danger.solid:not(:disabled):active{background:color-mix(in oklab,var(--danger) 88%,#000)}
 .btn.sm{min-height:40px;padding:0 16px;font-size:14px}
 .btn.block{width:100%}
@@ -202,7 +210,7 @@ button{cursor:pointer}
   font-size:14px;line-height:20px;font-weight:500;white-space:nowrap;
   transition:transform .25s ease,background-color .15s var(--ease-out),color .15s var(--ease-out),box-shadow .15s var(--ease-out)}
 .chip:active{transform:scale(.97)}
-.chip[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent-ink);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--accent-ink) 30%,transparent)}
+.chip[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent-ink);box-shadow:inset 0 0 0 1.5px var(--accent-ink)} /* full-strength ring: selection never rests on hue alone; same weight, so widths don't jump */
 .chip.zc::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--zc)}
 .chipsep{flex:none;width:1px;height:24px;align-self:center;margin:0 2px;background:var(--line)}
 .seg{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:2px;padding:2px;border-radius:999px;background:var(--sunk)}
@@ -212,6 +220,7 @@ button{cursor:pointer}
 @media (max-width:359px){.seg button{padding:0 4px;font-size:13px}}
 .pill{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;background:var(--sunk);color:var(--muted);font-size:12px;line-height:1;font-weight:600;white-space:nowrap;vertical-align:middle}
 .pill.pr{background:var(--flag);color:var(--flag-on)}
+:root[data-accent="gold"] .pill.pr{background:var(--flag-on);color:var(--flag)} /* black-and-gold, so PR never matches gold buttons and tints */
 .pill.sample{background:var(--warn-soft);color:var(--flag-ink)}
 .pill.sb,.pill.basis{background:var(--accent-soft);color:var(--accent-ink)}
 .pill.first{background:transparent;color:var(--accent-ink);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--accent-ink) 45%,transparent)}
@@ -232,8 +241,11 @@ button{cursor:pointer}
 .mrow+.mrow::before{left:54px}
 .row .name{display:flex;align-items:center;gap:6px;min-width:0}
 .row .name .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.row .meta .pill{height:18px;margin:-1px 6px 0 0;padding:0 7px;font-size:11px} /* sample runners: the tag rides on the meta line so the name keeps its room */
 .row .meta{margin-top:2px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* sample runners wear a sample-tinted, dashed bib; their "Sample" tag stays for screen readers and shows only where the bib is hidden */
+.row.sample .bib{background:var(--warn-soft);color:var(--flag-ink);border:1.5px dashed color-mix(in oklab,var(--flag-ink) 50%,transparent)}
+.row .meta .pill{height:18px;margin:-1px 6px 0 0;padding:0 7px;font-size:11px}
+@media (min-width:360px){.row .meta .pill{position:absolute;width:1px;height:1px;margin:0;padding:0;overflow:hidden;clip-path:inset(50%)}}
 /* race-bib avatar */
 .bib{position:relative;overflow:hidden;flex:none;width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent-ink);font-size:15px;line-height:1;font-weight:600}
 .bib::before,.bib::after{content:"";position:absolute;top:5px;width:4px;height:4px;border-radius:50%;background:var(--surface)}
@@ -245,6 +257,7 @@ button{cursor:pointer}
   .row>.bib{display:none}
   .row{grid-template-columns:minmax(0,1fr) auto}
   .row+.row::before{left:16px}
+  .row.sample .meta{white-space:normal} /* no bib: the tag shows and the line wraps (only after a "·") rather than cut the details */
 }
 .entry{position:relative;display:grid;grid-template-columns:52px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 16px}
 .entry .name{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:break-word} /* a long meet name gets a second line before it's cut */
@@ -253,7 +266,7 @@ button{cursor:pointer}
 .date .dy{font-size:22px;line-height:24px;font-weight:600;letter-spacing:-.02em}
 .mrow{position:relative;display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:12px;align-items:center;min-height:66px;padding:10px 16px 10px 12px}
 .mrow .mpl{text-align:center;font-size:16px;line-height:20px;font-weight:600;color:var(--muted)}
-.mrow:nth-child(-n+5) .mpl{color:var(--accent-ink)} /* the five who score */
+.mrow .mpl.sc{color:var(--accent-ink)} /* team places 1-5 score (ties share a place) */
 .mrow .name,.mrow .small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mrow .right .small{margin-top:3px}
 .zone{display:grid;grid-template-columns:4px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 16px 12px 12px;border-top:1px solid var(--sep)}
@@ -291,6 +304,7 @@ button{cursor:pointer}
 .grid2 .p{font-size:12px;line-height:16px;color:var(--muted)}
 .grid2 .hl{background:var(--accent-soft)}
 .grid2 .hl .d{color:var(--accent-ink)}
+.grid2 .hl .p{color:color-mix(in oklab,var(--muted) 80%,var(--ink))} /* 4.5:1 on the tint with every team color */
 .empty{display:flex;flex-direction:column;align-items:center;gap:12px;padding:32px 20px;text-align:center}
 .empty h2{margin:0;font-size:20px;line-height:26px;font-weight:600;letter-spacing:-.02em}
 .empty p{margin:0;max-width:34ch;color:var(--muted)}
@@ -343,6 +357,11 @@ table.t.plain th:first-child{font-weight:500}
 .field input[aria-invalid="true"]:focus,.erow input[aria-invalid="true"]:focus{box-shadow:0 0 0 2px var(--bad)}
 .field select,.prow select,.pscol select{background-image:var(--chev);background-repeat:no-repeat;background-position:right 12px center;background-size:16px;padding-right:40px;text-overflow:ellipsis;white-space:nowrap}
 .pscol select{padding-left:10px;padding-right:30px;background-position:right 8px center}
+@media (max-width:359px){ /* the zone select keeps room for "Threshold" */
+  .pscol{grid-template-columns:minmax(0,1fr) 100px 40px;gap:6px}
+  .pscol .iconbtn{width:40px;height:40px}
+  .pscol select{padding-left:8px;padding-right:24px;background-position:right 6px center}
+}
 .field input[type=date]{height:44px;padding-right:8px}
 .field input[type=date]::-webkit-date-and-time-value{text-align:left;min-height:24px}
 .field textarea{min-height:88px;resize:vertical}
@@ -365,9 +384,10 @@ table.t.plain th:first-child{font-weight:500}
 .check{display:flex;flex-direction:row-reverse;justify-content:space-between;align-items:center;gap:12px;min-height:44px;font-size:15px;line-height:20px;font-weight:500;cursor:pointer;-webkit-user-select:none;user-select:none}
 .check input{-webkit-appearance:none;appearance:none;flex:none;position:relative;margin:0;width:48px;height:28px;border-radius:999px;background:var(--switch-off);cursor:pointer;transition:background-color .25s ease}
 .check input::before{content:"";position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;background:#fff;
-  box-shadow:0 0 5px rgba(0,0,0,.02),0 2px 10px rgba(0,0,0,.06),0 0 1px rgba(0,0,0,.3),0 1px 2px rgba(0,0,0,.12);transition:transform .3s var(--ease-fluid)}
+  box-shadow:0 0 5px rgba(0,0,0,.02),0 2px 10px rgba(0,0,0,.06),0 0 1px rgba(0,0,0,.3),0 1px 2px rgba(0,0,0,.12);transition:transform .3s var(--ease-fluid),background-color .25s ease}
+.check input:not(:checked){box-shadow:inset 0 0 0 1.5px var(--muted)} /* the off switch keeps a visible edge on white */
 .check input:checked{background:var(--accent)}
-.check input:checked::before{transform:translateX(20px)}
+.check input:checked::before{transform:translateX(20px);background:var(--accent-fg)} /* HeroUI's selected thumb: stands out on every team color */
 .check input:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 /* team color swatches (Settings) */
 .swatches{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
@@ -401,6 +421,8 @@ table.t.plain th:first-child{font-weight:500}
 .notice.warn b,.notice.bk.due b{color:inherit}
 .notice.bk.warn{background:var(--danger-soft);color:var(--ink);box-shadow:none}
 .notice.bk.warn b{color:var(--bad)}
+.notice.warn button,.notice.bk.due button,.banner.warn>button{color:var(--flag-ink)} /* an alert's action takes the alert's own text color */
+.notice.bk.warn button{color:var(--ink)}
 /* status icon (HeroUI Alert indicator) on warnings; the backup line stays compact beside its button */
 .notice.warn:not(.bk)::before{content:"";flex:none;width:20px;height:20px;margin-left:-2px;background:currentColor;
   -webkit-mask:var(--ic-alert) center/contain no-repeat;mask:var(--ic-alert) center/contain no-repeat}
@@ -445,7 +467,7 @@ table.t.plain th:first-child{font-weight:500}
 @media (hover:hover){
   .btn:not(:disabled):hover{background:var(--accent-hover)}
   .btn.ghost:not(:disabled):hover,.iconbtn:not(:disabled):hover{background:color-mix(in oklab,var(--ctl) 92%,var(--ink))}
-  .btn.danger:not(:disabled):hover{background:color-mix(in oklab,var(--danger-soft) 88%,var(--bad))}
+  .btn.danger:not(.solid):not(:disabled):hover{background:color-mix(in oklab,var(--danger-soft) 88%,var(--bad));color:color-mix(in oklab,var(--bad) 70%,var(--ink))}
   .btn.danger.solid:not(:disabled):hover{background:color-mix(in oklab,var(--danger) 88%,#000)}
   .chip:not([aria-pressed="true"]):hover,.search:hover{background:color-mix(in oklab,var(--ctl) 94%,var(--ink))}
   .field input:not([type=checkbox]):hover,.field select:hover,.field textarea:hover,.woloop input:hover,.erow input:hover,.prow select:hover,.pscol select:hover{background-color:color-mix(in oklab,var(--ctl) 94%,var(--ink))}
@@ -808,7 +830,8 @@ function viewRoster(){
   const gs=groups();
   let list=all.filter(a=>(U.grp==="All"||a.group===U.grp)&&(U.gender==="all"||a.gender===U.gender)&&(!U.q||a.name.toLowerCase().includes(U.q.toLowerCase())));
   const withCalc=list.map(a=>({a,c:athleteCalc(a)}));
-  withCalc.sort((x,y)=>U.sort==="name"?x.a.name.localeCompare(y.a.name):(y.c?.rating||0)-(x.c?.rating||0)||x.a.name.localeCompare(y.a.name));
+  const dn=a=>a.sample?String(a.name).replace(/^Sample · /,""):a.name; // the name the row shows, so the Name sort reads in order
+  withCalc.sort((x,y)=>U.sort==="name"?dn(x.a).localeCompare(dn(y.a)):(y.c?.rating||0)-(x.c?.rating||0)||dn(x.a).localeCompare(dn(y.a)));
   const hasSample=all.some(a=>a.sample);
   return head+`<div class="wrap stack">
     ${banners()}${backupLine()}
@@ -822,10 +845,10 @@ function viewRoster(){
     <div class="list">${withCalc.map(({a,c})=>{
       const rs=resultsFor(a.id), rr=rs.filter(r=>!isEst(r)); const prev=rr[1]?resultCalc(rr[1],a.gender):null, cur=rr[0]?resultCalc(rr[0],a.gender):null;
       const trend = prev&&cur ? cur.rating-prev.rating : 0;
-      return `<button class="row" data-act="open" data-id="${a.id}">
+      return `<button class="row${a.sample?" sample":""}" data-act="open" data-id="${a.id}">
         <div class="bib">${esc(initials(a.name))}</div>
-        <div style="min-width:0"><div class="name"><span class="nm">${esc(a.sample?String(a.name).replace(/^Sample · /,""):a.name)}</span></div>
-        <div class="meta">${a.sample?'<span class="pill sample">Sample</span>':""}${[a.grade?`Gr ${esc(a.grade)}`:"",esc(a.group||""),`${rs.length} entr${rs.length===1?"y":"ies"}`].filter(Boolean).join(" · ")}</div></div>
+        <div style="min-width:0"><div class="name"><span class="nm">${esc(dn(a))}</span></div>
+        <div class="meta">${a.sample?'<span class="pill sample">Sample</span>':""}${[a.grade?`Gr ${esc(a.grade)}`:"",esc(a.group||""),`${rs.length} entr${rs.length===1?"y":"ies"}`].filter(Boolean).map(t=>t.replace(/ /g,"\u00a0")).join("\u00a0· ")}</div></div>
         <div class="right">${c?`<div class="big">${fmtEq(Tin.equiv(5,c.t3k))}</div><div class="small">5K eq · ${(c.rating*100).toFixed(1)}%${estPace(c)?" · est.":""}${trend?` <span class="${trend>0?"up":"down"}">${trend>0?"▲":"▼"}</span>`:""}</div>`:`<div class="small">No results yet</div>`}</div>
       </button>`}).join("")||`<div class="empty"><p>No runners match these filters.</p></div>`}</div>
   </div>`;
@@ -1085,7 +1108,7 @@ function viewMeet(m){
     ${R.secs.map(s=>{const sum=rcSum(s);
       return `<div class="sectionhead"><span class="label">${esc(s.label)}</span><span class="small">${nRunners(s.n)}</span></div>
       <div class="list">${s.rows.map(x=>`<button class="mrow" data-act="open" data-id="${esc(x.a.id)}" data-v="ledger">
-        <span class="mpl">${x.tp}</span>
+        <span class="mpl${x.tp<=5?" sc":""}">${x.tp}</span>
         <div style="min-width:0"><div class="name">${esc(x.a.name)}</div><div class="small"><span class="num">${rcPace(x,s)}</span> /mi${x.place?` · ${ord(x.place)} overall`:""}</div></div>
         <div class="right"><div class="big">${fmtRace(x.sec)}</div>${x.b?`<div class="small">${rcBadge(x)}</div>`:""}</div></button>`).join("")}
         ${sum.length?`<div class="msum">${esc(sum.join(" · "))}</div>`:""}</div>`}).join("")}
@@ -1943,7 +1966,7 @@ async function psMake(){
   if(!imgs){ if(!stale()){ psResetMakeBtn(); toast(pages>1?"Couldn't create the images. Try Pages of 30 with fewer runners.":"Couldn't create the image. Try Pages of 30."); } return }
   if(stale()){ imgs.forEach(x=>URL.revokeObjectURL(x.url)); return }
   psClear(); SH.imgs=imgs; psResetMakeBtn();
-  const out=$("#psOut"); if(out){ out.innerHTML=psPreviewHTML(imgs); out.scrollIntoView({block:"start",behavior:"smooth"}); }
+  const out=$("#psOut"); if(out){ out.innerHTML=psPreviewHTML(imgs); out.scrollIntoView({block:"start",behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"}); }
   if(want>cap) toast(`Too many runners for one image, so it was split into ${pages} pages.`);
 }
 function psResetMakeBtn(){const b=document.querySelector('[data-act="psMake"]');if(b){b.disabled=false;b.lastChild.textContent="Create image"}}
