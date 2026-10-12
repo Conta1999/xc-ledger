@@ -121,7 +121,29 @@ button{cursor:pointer}
 .pill.basis{background:var(--pine-soft);color:var(--pine)}
 .pill.sample{background:var(--flag);color:#3A2B00}
 .notice{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:12px;background:var(--sunk);font-size:13px;color:var(--muted)}
-.notice button{margin-left:auto;flex:none;border:0;background:none;color:var(--pine);font-weight:700;padding:4px}
+.notice button{margin:-8px -6px -8px auto;flex:none;border:0;background:none;color:var(--pine);font-weight:700;padding:4px 8px;min-height:40px;border-radius:10px}
+/* backup status (roster) and banners (Safari tab, new version) */
+.notice.bk b{color:var(--ink);font-weight:600}
+.notice.bk span{flex:1;min-width:0}
+.notice.bk.due{box-shadow:inset 3px 0 0 var(--flag)}
+.notice.bk.warn{background:color-mix(in srgb,var(--flag) 20%,var(--surface));color:var(--flag-ink);box-shadow:inset 3px 0 0 var(--bad)}
+.notice.bk.warn b{color:var(--bad)}
+.banner{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;padding:10px 12px;border-radius:12px;font-size:13.5px;line-height:1.4}
+.banner p{margin:0;flex:1 1 140px;min-width:0}
+.banner>button{flex:none;border:0;background:none;font-weight:700;min-height:40px;padding:4px 8px;margin:-6px -6px -6px auto;border-radius:10px;color:inherit}
+.banner.warn{background:color-mix(in srgb,var(--flag) 22%,var(--surface));color:var(--flag-ink)}
+.banner.warn p{flex-basis:100%}
+.banner.warn>button{margin:0 0 -8px -8px;text-decoration:underline;text-underline-offset:3px}
+.banner.upd{background:var(--pine-soft);color:var(--ink)}
+.banner.upd>button{background:var(--pine);color:var(--surface);padding:4px 16px;margin:-4px -4px -4px auto}
+.banner .steps{flex-basis:100%;margin:4px 0 2px;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.banner .more{flex-basis:100%;margin-top:6px}
+/* settings lists (trash, snapshots) */
+.srow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 10px 10px 14px;border-top:1px solid var(--line)}
+.srow:first-child{border-top:0}
+.srow .name{font-weight:600;font-size:14px;line-height:1.3;overflow-wrap:anywhere}
+.srow .why{font-size:12px;color:var(--bad);margin-top:2px}
+.btn.sm{padding:8px 12px;min-height:40px;font-size:14px}
 .empty{padding:28px 20px;text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center}
 .empty h2{font:700 24px/1.1 var(--f-display);text-transform:uppercase;margin:0}
 .empty p{margin:0;color:var(--muted);max-width:34ch}
@@ -190,6 +212,10 @@ table.t td .s{display:block;color:var(--muted);font-size:11.5px}
 .confirm{margin-top:12px;padding:12px;border-radius:12px;background:var(--sunk);display:flex;flex-direction:column;gap:10px;font-size:14px}
 .toast{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-weight:600;font-size:14px;opacity:0;transition:.2s;z-index:60;pointer-events:none;max-width:calc(100% - 32px)}
 .toast.on{opacity:1;transform:translateX(-50%)}
+.toast.act{display:flex;align-items:center;gap:14px;padding:4px 4px 4px 16px;width:max-content}
+.toast.act.on{pointer-events:auto}
+.toast button{flex:none;border:0;border-radius:9px;min-height:40px;padding:0 16px;background:color-mix(in srgb,var(--bg) 18%,transparent);color:var(--bg);font-weight:700;font-size:14px}
+.toast button:focus-visible{outline-color:var(--bg)}
 @media (prefers-reduced-motion:reduce){.sheet,.scrim,.toast{transition:none}}
 </style>
 </head>
@@ -296,17 +322,86 @@ const distLabel = r => r.distKey==="custom" ? `${r.meters}m` : (DMAP[r.distKey]?
 const distKm = r => r.distKey==="custom" ? (+r.meters||0)/1000 : DMAP[r.distKey]?.km;
 const repLabel = m => (REPS.find(r=>Math.abs(r[0]-m)<.5)||[m,m+"m"])[1];
 
-function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("on");clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove("on"),2000)}
+function toast(msg){toastShow(msg)}
+// Toast with a button (e.g. Undo). Stays ~6 s, and holds while the button has keyboard focus.
+function toastAction(msg,label,fn,focus){toastShow(msg,label,fn); if(focus) $("#toast button")?.focus({preventScroll:true})}
+function toastShow(msg,label,fn){
+  const t=$("#toast"); toast._fn=fn||null;
+  t.innerHTML=`<span>${esc(msg)}</span>${fn?`<button type="button" data-act="toastAct">${esc(label)}</button>`:""}`;
+  t.classList.toggle("act",!!fn); t.classList.add("on"); toastHold(fn?6000:2000);
+}
+function toastHold(ms){clearTimeout(toast._t);toast._t=setTimeout(toastHide,ms)}
+function toastHide(){const t=$("#toast");clearTimeout(toast._t);t.classList.remove("on");toast._fn=null;
+  setTimeout(()=>{if(!t.classList.contains("on")){t.classList.remove("act");t.querySelector("button")?.remove()}},250)}
+$("#toast").addEventListener("focusin",()=>clearTimeout(toast._t));
+$("#toast").addEventListener("focusout",()=>{if(toast._fn)toastHold(3000)});
 async function copyText(text,fallback){
   try{await navigator.clipboard.writeText(text);toast("Copied to clipboard");}
   catch{ fallback ? fallback(text) : openSheet({type:"copy",text}); }
 }
 
 /* ============ store: shared db when available, this device otherwise ============ */
-const S = {athletes:{}, results:{}, mode:"loading"};
+const APP_VERSION="1.4.0";
+const S = {athletes:{}, results:{}, trash:[], aliases:{}, mode:"loading"};
 const LS_KEY="xc-ledger-v1";
-function lsLoad(){try{const d=JSON.parse(localStorage.getItem(LS_KEY)||"{}");S.athletes=d.athletes||{};S.results=d.results||{};}catch{}}
-function lsSave(){try{localStorage.setItem(LS_KEY,JSON.stringify({athletes:S.athletes,results:S.results}))}catch{toast("Couldn't save. Your phone may be out of storage.")}}
+const isObj = x=>!!x&&typeof x==="object"&&!Array.isArray(x);
+function lsLoad(){try{const d=JSON.parse(localStorage.getItem(LS_KEY)||"{}");S.athletes=d.athletes||{};S.results=d.results||{};
+  S.trash=trashClean(d.trash);S.aliases=isObj(d.aliases)?d.aliases:{};
+  if(Array.isArray(d.trash)&&d.trash.length!==S.trash.length) lsSave();}catch{}}
+// The roster matters more than old snapshots: if the phone is full, drop the oldest snapshot and try again.
+function lsSave(){const json=JSON.stringify({athletes:S.athletes,results:S.results,trash:S.trash,aliases:S.aliases}); let snaps;
+  for(;;){try{localStorage.setItem(LS_KEY,json);return true}catch{try{snaps??=localStorage.getItem(SNAP_KEY)}catch{} if(!snapDropOldest())break}}
+  if(snaps!=null) try{localStorage.setItem(SNAP_KEY,snaps)}catch{} // dropping them didn't help, so put them back
+  toast("Couldn't save. Your phone may be out of storage."); return false}
+
+/* trash: deleted runners and entries stay 30 days so they can be restored */
+const TRASH_DAYS=30;
+function trashClean(t){return (Array.isArray(t)?t:[]).filter(x=>isObj(x)&&x.tid&&isObj(x.data)&&(x.type==="athlete"||x.type==="result")&&Date.now()-(+x.at||0)<TRASH_DAYS*864e5)}
+function trashMerge(more){const have=new Set(S.trash.map(x=>x.tid));
+  return trashClean([...S.trash,...(Array.isArray(more)?more:[]).filter(x=>x&&!have.has(x.tid))]).sort((a,b)=>b.at-a.at)}
+function trashAdd(item){const tid=uid();S.trash.unshift({tid,at:Date.now(),...item});return tid}
+function trashAthlete(id){ // the runner and all their results become one trash item
+  const a=S.athletes[id]; if(!a) return null; const rs=resultsFor(id);
+  const tid=trashAdd({type:"athlete",data:a,results:rs});
+  rs.forEach(r=>delete S.results[r.id]); delete S.athletes[id]; lsSave(); return tid;
+}
+function trashResult(id,noSave){ // noSave: caller saves once after a batch
+  const r=S.results[id]; if(!r) return null; const a=S.athletes[r.athleteId], basis=!!a&&a.basisId===id;
+  const tid=trashAdd(basis?{type:"result",data:r,basis:true}:{type:"result",data:r});
+  delete S.results[id]; if(basis) S.athletes[a.id]={...a,basisId:null}; if(!noSave) lsSave(); return tid;
+}
+const trashRunner = aid => S.athletes[aid] || S.trash.find(x=>x.type==="athlete"&&x.data.id===aid)?.data || null;
+function restoreTrash(tid){ // "" when restored, otherwise why it can't be
+  const i=S.trash.findIndex(x=>x.tid===tid), it=S.trash[i]; if(!it) return "That item is no longer in the trash.";
+  if(it.type==="athlete"){ S.athletes[it.data.id]=it.data; (it.results||[]).forEach(r=>{S.results[r.id]=r}); }
+  else{
+    const a=S.athletes[it.data.athleteId], gone=trashRunner(it.data.athleteId);
+    if(!a) return gone ? `${gone.name} is in the trash too. Restore ${gone.name} first, then this entry.` : "This entry's runner was permanently deleted, so there's no ledger to put it back in.";
+    S.results[it.data.id]=it.data; if(it.basis&&!a.basisId) S.athletes[a.id]={...a,basisId:it.data.id}; // re-pin unless another basis was pinned since
+  }
+  S.trash.splice(i,1); lsSave(); return "";
+}
+// Name-to-runner links from pasted results; keep only links to runners on the roster or in the trash.
+function aliasesClean(al){const o={};Object.entries(isObj(al)?al:{}).forEach(([k,v])=>{if(typeof v==="string"&&trashRunner(v))o[k]=v});return o}
+
+/* snapshots: a copy of the data saved before risky changes (newest first, last 3 kept) */
+const SNAP_KEY="xc-ledger-snapshots";
+function snapList(){try{const L=JSON.parse(localStorage.getItem(SNAP_KEY)||"[]");return Array.isArray(L)?L.filter(x=>isObj(x)&&isObj(x.athletes)&&isObj(x.results)):[]}catch{return []}}
+function snapshot(label){
+  const L=[{at:Date.now(),label,athletes:S.athletes,results:S.results,aliases:S.aliases,trash:S.trash},...snapList()].slice(0,3);
+  try{localStorage.setItem(SNAP_KEY,JSON.stringify(L));return true}catch{}
+  if(L.length>1){L.pop();try{localStorage.setItem(SNAP_KEY,JSON.stringify(L));return true}catch{}}
+  if(!snapshot._warned){snapshot._warned=true;toast("Couldn't save a snapshot. Your phone may be out of storage.")}
+  return false;
+}
+function snapDropOldest(){const L=snapList();if(!L.length)return false;L.pop();
+  try{L.length?localStorage.setItem(SNAP_KEY,JSON.stringify(L)):localStorage.removeItem(SNAP_KEY);return true}catch{return false}}
+function snapRestore(at){
+  const s=snapList().find(x=>x.at===at); if(!s) return false;
+  snapshot("Before restoring a snapshot");
+  S.athletes=s.athletes; S.results=s.results; S.trash=trashMerge(s.trash); S.aliases=aliasesClean({...S.aliases,...(isObj(s.aliases)?s.aliases:{})});
+  lsSave(); return true;
+}
 const SET={team:"",lastBackup:0};
 try{Object.assign(SET,JSON.parse(localStorage.getItem("xc-ledger-settings")||"{}"))}catch{}
 function saveSet(){try{localStorage.setItem("xc-ledger-settings",JSON.stringify(SET))}catch{}}
@@ -345,7 +440,7 @@ function groups(){return [...new Set(Object.values(S.athletes).map(a=>a.group).f
 /* ============ UI state ============ */
 // Team pace sheet: default columns match the coach's own sheet (Mile Threshold, 800m VO2 Max, fast end of each range)
 const PS_DEF = {title:"", cols:[{z:4,m:1609.344},{z:7,m:800}], end:"fast", grp:"All", gender:"all", sort:"fast", per:30};
-const U = {view:"roster", athlete:null, q:"", grp:"All", gender:"all", sort:"rating", atab:"paces", rep:400,
+const U = {view:"roster", athlete:null, q:"", grp:"All", gender:"all", sort:"rating", atab:"paces", rep:400, swNew:false, sfHelp:false,
   wo:{zone:5, rep:1000, grp:"All", gender:"all"},
   calc:{dist:"5k", meters:"", time:"", gender:"m"}};
 try{const s=JSON.parse(localStorage.getItem("xc-ledger-ui")||"{}");if(s.wo)Object.assign(U.wo,s.wo);if(s.rep)U.rep=s.rep;if(s.sort)U.sort=s.sort;
@@ -389,7 +484,7 @@ function viewRoster(){
     <button class="btn" data-act="addAthlete" aria-label="Add athlete">${I.plus}Runner</button></header>`;
   if(S.mode==="loading") return head+`<div class="wrap"><div class="card empty"><p>Loading your roster…</p></div></div>`;
   if(!all.length) return head+`<div class="wrap stack">
-    ${modeNotice()}
+    ${banners()}${backupLine()}
     <div class="card empty">
       <div class="bib" style="width:64px;height:64px;font-size:28px">XC</div>
       <h2>Build your roster</h2>
@@ -403,7 +498,7 @@ function viewRoster(){
   withCalc.sort((x,y)=>U.sort==="name"?x.a.name.localeCompare(y.a.name):(y.c?.rating||0)-(x.c?.rating||0)||x.a.name.localeCompare(y.a.name));
   const hasSample=all.some(a=>a.sample);
   return head+`<div class="wrap stack">
-    ${modeNotice()}
+    ${banners()}${backupLine()}
     ${hasSample?`<div class="notice"><span class="pill sample">Sample</span>Example runners are in your roster.<button data-act="unseed">Remove</button></div>`:""}
     <label class="search">${I.search}<input id="q" type="search" placeholder="Search ${all.length} runners" value="${esc(U.q)}" autocomplete="off"></label>
     <div class="chips">${["All",...gs].map(g=>`<button class="chip" data-act="grp" data-v="${esc(g)}" aria-pressed="${U.grp===g}">${esc(g)}</button>`).join("")}
@@ -422,9 +517,34 @@ function viewRoster(){
       </button>`}).join("")||`<div class="empty"><p>No runners match these filters.</p></div>`}</div>
   </div>`;
 }
-function modeNotice(){
-  const n=Object.values(S.results).filter(r=>!r.sample).length, days=(Date.now()-(SET.lastBackup||0))/864e5;
-  return n>=5 && days>30 ? `<div class="notice">Your roster lives on this phone. ${SET.lastBackup?`Last backup was ${Math.floor(days)} days ago.`:"Save a backup so a lost phone doesn't lose the season."}<button data-act="settings">Back up</button></div>`:"";
+// Whole calendar days since a timestamp (0 = today)
+function daysSince(ts){const a=new Date(ts),b=new Date();a.setHours(0,0,0,0);b.setHours(0,0,0,0);return Math.max(0,Math.round((b-a)/864e5))}
+const backupAgo = ()=>{if(!SET.lastBackup) return "";const d=daysSince(SET.lastBackup);return d===0?"today":d===1?"yesterday":`${d} days ago`};
+function backupLine(){
+  if(!Object.values(S.athletes).some(a=>!a.sample)) return "";
+  const n=Object.values(S.results).filter(r=>!r.sample).length, d=SET.lastBackup?daysSince(SET.lastBackup):null;
+  const lvl = d==null ? (n>=5?"warn":"") : d>14 ? "warn" : d>7 ? "due" : "";
+  const msg = d==null ? `<b>Never backed up.</b>${n>=5?" Your roster is only on this phone.":""}` : `<b>Last backup: ${backupAgo()}</b>`;
+  return `<div class="notice bk ${lvl}"><span>${msg}</span><button data-act="exportData">Back up now</button></div>`;
+}
+// iPhone/iPad browser tab instead of the Home Screen app: the browser keeps its own separate copy of the data.
+function browserTab(){
+  try{
+    const ua=navigator.userAgent||"", ios=/iPhone|iPad|iPod/.test(ua)||(/Macintosh/.test(ua)&&navigator.maxTouchPoints>1); // iPads report a Mac user agent
+    if(!ios||navigator.standalone===true||matchMedia("(display-mode: standalone)").matches) return "";
+    return /CriOS|FxiOS|EdgiOS|OPiOS/.test(ua)?"other":"safari";
+  }catch{return ""}
+}
+let IN_TAB=browserTab();
+function banners(){
+  let h="";
+  if(U.swNew) h+=`<div class="banner upd" role="status"><p>A new version is ready.</p><button data-act="appUpdate">Update</button></div>`;
+  if(IN_TAB){const sf=IN_TAB==="safari", mine=Object.values(S.athletes).some(a=>!a.sample);
+    h+=`<div class="banner warn" role="note"><p>You're in ${sf?"Safari":"a browser tab"}. Open XC Ledger from its Home Screen icon — ${sf?"Safari":"the browser"} keeps a separate copy, so your roster won't show here.</p>
+      <button data-act="sfHelp" aria-expanded="${U.sfHelp}">How to install</button>
+      ${U.sfHelp?`<ol class="steps"><li>Tap Share (the square with an up arrow). In Safari on newer iPhones, tap ··· first.</li><li>Tap Add to Home Screen, then Add.</li><li>Open XC Ledger from the new icon on your Home Screen. If the icon is already there, just open it.</li></ol>
+      ${mine?`<p class="more">Runners you added here stay here. To move them, tap the gear on the Roster tab, save a backup file, then restore it in the Home Screen app.</p>`:""}`:""}</div>`;}
+  return h;
 }
 
 function sparkSVG(a){
@@ -484,7 +604,7 @@ function viewAthlete(a){
       <p class="small" style="margin:0">Predicted times across distances from the current pace basis, on a flat course.</p>`
       : `<div class="card empty"><p>Add a result to see equivalent times.</p></div>`;
   }
-  return head+`<div class="wrap stack">${hero}
+  return head+`<div class="wrap stack">${banners()}${hero}
     <div class="seg"><button data-act="atab" data-v="paces" aria-pressed="${U.atab==="paces"}">Paces</button><button data-act="atab" data-v="ledger" aria-pressed="${U.atab==="ledger"}">Ledger · ${rs.length}</button><button data-act="atab" data-v="equiv" aria-pressed="${U.atab==="equiv"}">Equivalents</button></div>
     ${body}${a.notes?`<div class="card"><div class="label">Coach notes</div><div style="white-space:pre-wrap;margin-top:6px">${esc(a.notes)}</div></div>`:""}</div>`;
 }
@@ -498,7 +618,7 @@ function viewWorkout(){
   const gs=groups();
   return `<header class="top"><div style="flex:1;min-width:0"><div class="sub">Today's session</div><h1>Workout Splits</h1></div>
     <button class="iconbtn" data-act="copyWorkout" aria-label="Copy split sheet">${I.copy}</button></header>
-  <div class="wrap stack">
+  <div class="wrap stack">${banners()}
     <button class="pscta" data-act="openPaceSheet"><span class="ico">${I.sheet}</span>
       <span style="min-width:0"><b>Team pace sheet</b><span class="small" style="display:block">An image of every runner's target paces, fastest first, to text the team.</span></span>
       <span aria-hidden="true" style="color:var(--muted);font-size:22px">›</span></button>
@@ -524,7 +644,7 @@ function viewWorkout(){
 function viewCalc(){
   const k=U.calc;
   return `<header class="top"><div style="flex:1;min-width:0"><div class="sub">Tinman · Tom Schwartz</div><h1>Pace Calculator</h1></div></header>
-  <div class="wrap stack">
+  <div class="wrap stack">${banners()}
     <div class="card stack">
       <div class="fields">
         <div class="field"><label class="label" for="cDist">Race distance</label>${distSelect("cDist",k.dist)}</div>
@@ -608,19 +728,23 @@ function sheetHTML(s){
       <div class="actions"><button type="button" class="btn ghost" data-act="closeSheet">Cancel</button><button class="btn" type="submit">${s.r?"Save":"Log result"}</button></div>
       ${s.r?`<button type="button" class="btn danger block" data-act="askDelResult">Delete entry</button><div id="delBox"></div>`:""}
     </form>`;}
-  if(s.type==="settings"){const na=Object.keys(S.athletes).length, nr=Object.keys(S.results).length;
+  if(s.type==="settings"){
     return `<h2>Team & backup</h2><form id="fSettings" class="stack">
       <div class="field"><label class="label" for="sTeam">Team name</label><input id="sTeam" value="${esc(SET.team)}" placeholder="Team Ledger" autocomplete="off"></div>
       <button class="btn" type="submit">Save name</button>
     </form>
     <div class="stack" style="margin-top:22px">
       <div class="label">Backup</div>
-      <p class="small" style="margin:0">Everything is stored on this phone: ${na} runner${na===1?"":"s"}, ${nr} result${nr===1?"":"s"}. A backup file can be saved to Files, AirDropped or emailed, and restored on any phone.${SET.lastBackup?` Last backup: ${new Date(SET.lastBackup).toLocaleDateString()}.`:""}</p>
+      <p class="small" style="margin:0" id="setCount">${setCountText()}</p>
       <button class="btn ghost block" data-act="exportData">Save a backup file</button>
       <label class="btn ghost block" for="importFile">Restore from a backup file</label>
       <input type="file" id="importFile" accept=".json,application/json" hidden>
       <div id="importBox"></div>
+      <p class="small" style="margin:0"><b>Deleting the Home Screen icon deletes this app's data.</b> Save a backup first.</p>
     </div>
+    <div class="stack" style="margin-top:22px"><div class="label">Trash</div><div id="trashBox" class="stack">${trashHTML()}</div></div>
+    <div class="stack" style="margin-top:22px"><div class="label">Snapshots</div><div id="snapBox" class="stack">${snapsHTML()}</div></div>
+    <p class="small" style="margin:22px 0 0;text-align:center">Version ${APP_VERSION}</p>
     <div class="actions"><button class="btn ghost" data-act="closeSheet">Done</button></div>`;}
   if(s.type==="pacesheet"){const cfg=U.ps, gs=groups(), {rows,missing}=psRows(cfg);
     const seg=(act,cur,opts)=>`<div class="seg">${opts.map(([k,l])=>`<button type="button" data-act="${act}" data-v="${k}" aria-pressed="${String(cur)===String(k)}">${l}</button>`).join("")}</div>`;
@@ -654,6 +778,43 @@ function sheetHTML(s){
   return "";
 }
 
+/* ============ settings: backup status, trash, snapshots ============ */
+const nRunners = n=>`${n} runner${n===1?"":"s"}`, nResults = n=>`${n} result${n===1?"":"s"}`;
+function setCountText(){const ago=backupAgo();
+  return `Everything is stored on this phone: ${nRunners(Object.keys(S.athletes).length)}, ${nResults(Object.keys(S.results).length)}. A backup file can be saved to Files, AirDropped or emailed, and restored on any phone. ${ago?`Last backup: ${ago}.`:"Never backed up."}`}
+const dayStamp = at=>new Date(at).toLocaleDateString(undefined,{month:"short",day:"numeric"});
+const snapWhen = at=>new Date(at).toLocaleString(undefined,{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});
+function trashTitle(x){
+  if(x.type==="athlete") return x.data.name||"Runner";
+  const r=x.data;
+  return `${trashRunner(r.athleteId)?.name||"Deleted runner"} — ${r.meet||(r.kind==="tt"?"Time trial":r.kind==="est"?"Estimate":"Race")}, ${distLabel(r)}, ${fmtRace(+r.seconds)}`;
+}
+function trashHTML(){
+  const t=S.trash;
+  if(!t.length) return `<p class="small" style="margin:0">Trash is empty. Deleted runners and entries stay here for ${TRASH_DAYS} days, so you can bring them back.</p>`;
+  return `<p class="small" style="margin:0">Deleted runners and entries stay here for ${TRASH_DAYS} days.</p>
+    <div class="list">${t.map(x=>{const n=(x.results||[]).length;
+      return `<div class="srow"><div style="min-width:0"><div class="name">${esc(trashTitle(x))}</div>
+        <div class="small">${x.type==="athlete"?(n?`Runner and ${n} entr${n===1?"y":"ies"}`:"Runner"):"Entry"} · Deleted ${dayStamp(x.at)}</div>
+        ${SH?.trashWhy?.tid===x.tid?`<div class="why">${esc(SH.trashWhy.msg)}</div>`:""}</div>
+        <button type="button" class="btn ghost sm" data-act="trashRestore" data-v="${esc(x.tid)}">Restore</button></div>`}).join("")}</div>
+    ${SH?.trashAsk?`<div class="confirm" style="margin:0">Permanently delete ${t.length===1?"this item":`these ${t.length} items`}? A snapshot is saved first, so you can still get ${t.length===1?"it":"them"} back from Snapshots.
+      <div class="actions" style="margin:0"><button type="button" class="btn ghost" data-act="trashKeep">Keep</button><button type="button" class="btn" style="background:var(--bad)" data-act="trashEmpty">Empty trash</button></div></div>`
+    :`<button type="button" class="btn danger block" data-act="trashAsk">Empty trash</button>`}`;
+}
+function snapsHTML(){
+  const L=snapList(), ask=L.find(x=>x.at===SH?.snapAsk), size=x=>`${nRunners(Object.keys(x.athletes).length)}, ${nResults(Object.keys(x.results).length)}`;
+  if(!L.length) return `<p class="small" style="margin:0">None yet. Before big changes, like restoring a backup or emptying the trash, the app saves a copy of your data here. The last 3 are kept.</p>`;
+  return `<p class="small" style="margin:0">Copies of your data saved automatically before big changes. The last 3 are kept on this phone.</p>
+    <div class="list">${L.map(x=>`<div class="srow"><div style="min-width:0"><div class="name">${esc(x.label||"Snapshot")}</div><div class="small">${snapWhen(x.at)} · ${size(x)}</div></div>
+      <button type="button" class="btn ghost sm" data-act="snapAsk" data-v="${+x.at}">Restore</button></div>`).join("")}</div>
+    ${ask?`<div class="confirm" style="margin:0">Replace everything on this phone with the snapshot from ${snapWhen(ask.at)} (${size(ask)})? Your current data is saved as a snapshot first.
+      <div class="actions" style="margin:0"><button type="button" class="btn ghost" data-act="snapKeep">Cancel</button><button type="button" class="btn" data-act="snapRestore" data-v="${+ask.at}">Restore</button></div></div>`:""}`;
+}
+// Redraw the Settings sections in place (keeps a typed team name and a pending restore), then move focus to `focus`.
+function setRefresh(focus){[["#setCount",setCountText],["#trashBox",trashHTML],["#snapBox",snapsHTML]].forEach(([id,f])=>{const el=$(id);if(el)el.innerHTML=f()});
+  if(focus) document.querySelector("#sheetRoot "+focus)?.focus()}
+
 /* ============ events ============ */
 document.addEventListener("click",e=>{
   const t=e.target.closest("[data-act]"); if(!t) return;
@@ -681,10 +842,27 @@ document.addEventListener("click",e=>{
     case "closeSheet": closeSheet(); break;
     case "agender": $("#aGender").value=v; t.parentElement.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",b===t)); break;
     case "rkind": $("#rKind").value=v; t.parentElement.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",b===t)); break;
-    case "askDelAthlete": $("#delBox").innerHTML=`<div class="confirm">Delete ${esc(SH.a.name)} and all ${resultsFor(SH.a.id).length} ledger entries? This can't be undone.<div class="actions" style="margin:0"><button type="button" class="btn ghost" data-act="closeSheet">Keep</button><button type="button" class="btn" style="background:var(--bad)" data-act="delAthlete">Delete</button></div></div>`; break;
-    case "delAthlete": {const id=SH.a.id; resultsFor(id).forEach(r=>del("results",r.id)); del("athletes",id); U.athlete=null; closeSheet(); render(); toast("Runner deleted"); break;}
+    case "askDelAthlete": $("#delBox").innerHTML=`<div class="confirm">Delete ${esc(SH.a.name)} and all ${resultsFor(SH.a.id).length} ledger entries? You can restore them from Trash in Team & backup for ${TRASH_DAYS} days.<div class="actions" style="margin:0"><button type="button" class="btn ghost" data-act="closeSheet">Keep</button><button type="button" class="btn" style="background:var(--bad)" data-act="delAthlete">Delete</button></div></div>`; break;
+    case "delAthlete": {const id=SH.a.id, tid=trashAthlete(id); U.athlete=null; closeSheet(); render();
+      toastAction("Runner deleted","Undo",()=>{const why=restoreTrash(tid); if(why) return toast(why); U.athlete=id; render(); scrollTo(0,0); toast("Runner restored")},e.detail===0); break;}
     case "askDelResult": $("#delBox").innerHTML=`<div class="confirm">Delete this entry?<div class="actions" style="margin:0"><button type="button" class="btn ghost" data-act="closeSheet">Keep</button><button type="button" class="btn" style="background:var(--bad)" data-act="delResult">Delete</button></div></div>`; break;
-    case "delResult": {const r=SH.r; del("results",r.id); const a=S.athletes[r.athleteId]; if(a&&a.basisId===r.id) put("athletes",a.id,{...a,basisId:null}); closeSheet(); render(); toast("Entry deleted"); break;}
+    case "delResult": {const tid=trashResult(SH.r.id); closeSheet(); render();
+      toastAction("Entry deleted","Undo",()=>{const why=restoreTrash(tid); if(why) return toast(why); render(); toast("Entry restored")},e.detail===0); break;}
+    case "toastAct": {const fn=toast._fn; toastHide(); if(fn) fn(); break;}
+    case "appUpdate": location.reload(); break;
+    case "sfHelp": U.sfHelp=!U.sfHelp; render(); break;
+    case "trashRestore": {const x=S.trash.find(i=>i.tid===v), why=restoreTrash(v);
+      if(why){ if(x) SH.trashWhy={tid:v,msg:why}; else toast(why); }
+      else{ SH.trashWhy=null; toast(x.type==="athlete"?`${x.data.name} restored`:"Entry restored"); }
+      setRefresh(); render(); break;}
+    case "trashAsk": SH.trashAsk=true; setRefresh('[data-act="trashKeep"]'); break;
+    case "trashKeep": SH.trashAsk=false; setRefresh('[data-act="trashAsk"]'); break;
+    case "trashEmpty": snapshot("Before emptying the trash"); S.trash=[]; S.aliases=aliasesClean(S.aliases); lsSave();
+      SH.trashAsk=false; SH.trashWhy=null; setRefresh(); toast("Trash emptied"); break;
+    case "snapAsk": SH.snapAsk=+v; setRefresh('[data-act="snapKeep"]'); break;
+    case "snapKeep": SH.snapAsk=null; setRefresh(); break;
+    case "snapRestore": if(!snapRestore(+v)){SH.snapAsk=null; setRefresh(); toast("That snapshot is no longer saved. Pick another one."); break}
+      U.athlete=null; closeSheet(); render(); toast("Snapshot restored"); break;
     case "copyPaces": copyText(pacesText(S.athletes[U.athlete])); break;
     case "copyWorkout": copyText(workoutText()); break;
     case "openPaceSheet": if(U.ps.grp!=="All"&&!groups().includes(U.ps.grp)){U.ps.grp="All";saveUI()} openSheet({type:"pacesheet"}); break;
@@ -703,8 +881,12 @@ document.addEventListener("click",e=>{
     case "seed": seed(); break;
     case "settings": openSheet({type:"settings"}); break;
     case "exportData": exportData(); break;
-    case "doImport": {const d=SH&&SH.pending; if(!d) break; S.athletes=d.athletes; S.results=d.results; lsSave(); U.athlete=null; closeSheet(); render(); toast("Backup restored"); break;}
-    case "unseed": Object.values(S.athletes).filter(a=>a.sample).forEach(a=>{resultsFor(a.id).forEach(r=>del("results",r.id));del("athletes",a.id)}); render(); toast("Sample runners removed"); break;
+    case "doImport": {const d=SH&&SH.pending; if(!d) break; snapshot("Before restoring a backup");
+      S.athletes=d.athletes; S.results=d.results; S.trash=trashMerge(d.trash); S.aliases=aliasesClean({...S.aliases,...(isObj(d.aliases)?d.aliases:{})});
+      lsSave(); U.athlete=null; closeSheet(); render(); toast("Backup restored"); break;}
+    case "unseed": snapshot("Before removing sample runners"); // examples: no trash, but a snapshot just in case
+      Object.values(S.athletes).filter(a=>a.sample).forEach(a=>{resultsFor(a.id).forEach(r=>delete S.results[r.id]);delete S.athletes[a.id]});
+      lsSave(); render(); toast("Sample runners removed"); break;
   }
 });
 document.addEventListener("input",e=>{
@@ -916,21 +1098,27 @@ function workoutText(){
 /* ============ backup ============ */
 async function exportData(){
   const stamp=today(), name=`xc-ledger-backup-${stamp}.json`;
-  const json=JSON.stringify({app:"xc-ledger",version:1,exported:new Date().toISOString(),team:SET.team,athletes:S.athletes,results:S.results},null,1);
+  // Must run straight from the tap (no await before share), or iPhone blocks the share sheet.
+  const json=JSON.stringify({app:"xc-ledger",version:2,appVersion:APP_VERSION,exported:new Date().toISOString(),team:SET.team,athletes:S.athletes,results:S.results,trash:S.trash,aliases:S.aliases},null,1);
   const file=new File([json],name,{type:"application/json"});
   try{
     if(navigator.canShare&&navigator.canShare({files:[file]})){ await navigator.share({files:[file],title:"XC Ledger backup"}); }
     else{ const a=document.createElement("a"); a.href=URL.createObjectURL(file); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000); }
-    SET.lastBackup=Date.now(); saveSet(); toast("Backup ready"); render();
+    SET.lastBackup=Date.now(); saveSet(); toast("Backup ready"); render(); setRefresh();
   }catch(err){ if(err&&err.name!=="AbortError") toast("Couldn't create the backup file."); }
 }
+// Reads backups from version 1 (athletes, results) and version 2 (adds trash, aliases).
 function readImport(f){
   const box=$("#importBox"); const r=new FileReader();
   r.onload=()=>{
     let d; try{d=JSON.parse(r.result)}catch{d=null}
-    if(!d||d.app!=="xc-ledger"||typeof d.athletes!=="object"||typeof d.results!=="object"){box.innerHTML=`<div class="confirm" style="color:var(--bad)">That file isn't an XC Ledger backup.</div>`;return}
+    const fail=m=>{box.innerHTML=`<div class="confirm" style="color:var(--bad)">${m}</div>`};
+    if(!isObj(d)||d.app!=="xc-ledger"||!isObj(d.athletes)||!isObj(d.results)) return fail("That file isn't an XC Ledger backup. Choose a file named like xc-ledger-backup-2026-10-12.json.");
+    const ver=d.version==null?1:+d.version;
+    if(ver>2) return fail("This backup was made by a newer version of XC Ledger. Close and reopen the app to update it, then try again.");
+    if(ver!==1&&ver!==2) return fail("That file isn't an XC Ledger backup. Choose a file named like xc-ledger-backup-2026-10-12.json.");
     SH.pending=d; const na=Object.keys(d.athletes).length, nr=Object.keys(d.results).length;
-    box.innerHTML=`<div class="confirm">Replace everything on this phone with the backup from ${esc(new Date(d.exported).toLocaleDateString())} (${na} runners, ${nr} results)?<div class="actions" style="margin:0"><button type="button" class="btn ghost" data-act="closeSheet">Cancel</button><button type="button" class="btn" data-act="doImport">Restore</button></div></div>`;
+    box.innerHTML=`<div class="confirm">Replace everything on this phone with the backup from ${esc(new Date(d.exported).toLocaleDateString())} (${nRunners(na)}, ${nResults(nr)})? Your current data is saved as a snapshot first.<div class="actions" style="margin:0"><button type="button" class="btn ghost" data-act="closeSheet">Cancel</button><button type="button" class="btn" data-act="doImport">Restore</button></div></div>`;
     if(d.team&&!SET.team){SET.team=d.team;saveSet()}
   };
   r.readAsText(f);
@@ -955,7 +1143,14 @@ async function seed(){
 
 render();
 initStore();
-if("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(()=>{});
+// Updates: a new service worker taking over an already-running app shows a banner; the coach decides when to reload.
+let swReg=null;
+if("serviceWorker" in navigator && location.protocol.startsWith("http")){
+  let swHad=!!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener("controllerchange",()=>{if(swHad&&!U.swNew){U.swNew=true;render()} swHad=true});
+  navigator.serviceWorker.register("sw.js").then(r=>{swReg=r}).catch(()=>{});
+  document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&swReg){try{swReg.update().catch(()=>{})}catch{}}});
+}
 </script>
 </body>
 </html>
