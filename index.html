@@ -62,7 +62,7 @@ button{cursor:pointer}
 .top{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(14px + env(safe-area-inset-top,0px)) calc(16px + env(safe-area-inset-right,0px)) 10px calc(16px + env(safe-area-inset-left,0px));display:flex;align-items:center;gap:10px;border-bottom:1px solid transparent}
 .top.scrolled{border-bottom-color:var(--line)}
 .top h1{font:700 30px/1 var(--f-display);letter-spacing:.01em;margin:0;text-transform:uppercase;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.top h1.mt{white-space:normal;font-size:26px;line-height:1.05;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow-wrap:anywhere} /* a meet name: up to two lines */
+.top h1.mt{white-space:normal;font-size:26px;line-height:1.05;overflow:visible;text-overflow:clip;overflow-wrap:anywhere} /* a meet name wraps so it always shows in full */
 .top .sub{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.06em;text-transform:uppercase}
 .iconbtn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;flex:none}
 .iconbtn svg{width:20px;height:20px}
@@ -500,8 +500,9 @@ function initStore(){
 async function put(coll,id,data){
   const body={...data}; delete body.id;
   S[coll][id]={...body,id};
-  lsSave();
+  const ok=lsSave();
   render();
+  return ok;
 }
 // Many writes [[coll,id,data],…] with one save, so a 60-runner meet doesn't save 60 times. The caller renders once.
 function putBatch(writes){
@@ -1053,7 +1054,7 @@ function entrySave(){
     if(Object.values(S.results).some(x=>x.athleteId===aid&&!mine.has(x.id)&&x.id!==id&&isRace(x)&&(x.date||"")>d.date)){kept++; return}
     W.push(["athletes",aid,{...a,basisId:id}])});
   const ok=putBatch(W);
-  if(!d.key){U.rlast={dist:d.dist,meters:meters||"",kind:d.kind,meet,date:d.date,at:now}; saveUI()} // a newly entered meet prefills the result sheet (fixing an old meet doesn't)
+  if(ok&&!d.key){U.rlast={dist:d.dist,meters:meters||"",kind:d.kind,meet,date:d.date,at:now}; saveUI()} // a newly entered meet prefills the result sheet (fixing an old meet doesn't)
   delete U.drafts[U.ek]; delete U.drafts[tk];
   U.view="meet"; U.meet=tk; render(); scrollTo(0,0); // the meet's results and recap (the Meets list if every time was cleared)
   if(ok) toast([saved.length?`Saved ${nResults(saved.length)}`:"",gone.length?`${gone.length} moved to Trash`:"",kept?`Paces kept for ${nRunners(kept)} with a newer race`:""].filter(Boolean).join(" · "));
@@ -1136,8 +1137,11 @@ function pasteParse(text,km){
     if(buf.length){const nm=pasteName(line,false), all=[...(nm?buf.slice(-1):buf),line].join("\t"); // a time line with a name of its own joins only the line above ("1. Jordan Lee" / "12 Lincoln HS 16:58.20")
       if(!nm||(!pasteFind(line,nm,keys)&&pasteFind(all,pasteName(all,true),keys))){rec=all;joined=true}}
     buf.length=0;
-    const name=pasteName(rec,joined), m=pasteFind(rec,name,keys,joined&&normName(name).includes(" ")), rest=normName(name?rec.replace(name,""):rec).split(" ");
-    out.push({rec, sec:t.sec, tok:t.tok, place:pastePlace(rec,joined), name, key:normName(name), aid:m?m.aid:"", alias:!!m?.alias, dup:false,
+    const name=pasteName(rec,joined), m0=pasteFind(rec,name,keys,joined&&normName(name).includes(" ")), rest=normName(name?rec.replace(name,""):rec).split(" ");
+    // A line with a full name of its own ("Sam Jordan, Lee County") that only matches by borrowing other words is most likely another
+    // team's runner: suggest our runner but don't pick them. One-word or initials names (split columns, avatar initials) still match.
+    const own=m0&&m0.tier===1&&/\p{L}{2,}[\s,]+\p{L}{2,}/u.test(String(name||"").trim()), m=own?null:m0;
+    out.push({rec, sec:t.sec, tok:t.tok, place:pastePlace(rec,joined), name, key:normName(name), aid:m?m.aid:"", sugg:own?m0.aid:"", alias:!!m?.alias, dup:false,
       tier:m?m.tier:0, w:m?m.tier*2+(team.some(w=>rest.includes(w))?1:0):0}); // a line that names our team wins a tie
   });
   // A runner goes with one line: the surest match (remembered, then the name itself, then a line naming our team), else the first.
@@ -1165,7 +1169,7 @@ function pasteOut(){
   const opts=pasteOpts(), hit=[], miss=[], n=rows.filter(r=>r.aid).length; rows.forEach((r,i)=>(r.aid||r.clash?hit:miss).push(i)); // close calls show both lines
   const row=i=>{const r=rows[i], v=esc(pastePk(r));
     return `<div class="prow"><div style="min-width:0"><div class="name">${r.place?`${r.place}. `:""}${esc(r.name||"No name found")}</div>
-      <div class="small"><span class="num">${esc(r.tok)}</span>${r.alias?" · remembered":""}${r.clash?` · ${r.dup?"same runner as":"also matches"} another line, check the team`:r.dup?" · same runner as another line":""}</div></div>
+      <div class="small"><span class="num">${esc(r.tok)}</span>${r.alias?" · remembered":""}${r.aid&&r.tier===1&&!r.clash?" · <b>check</b>: matched from words across the line":""}${!r.aid&&!r.dup&&r.sugg&&S.athletes[r.sugg]?` · might be ${esc(S.athletes[r.sugg].name)}, check the name and team`:""}${r.clash?` · ${r.dup?"same runner as":"also matches"} another line, check the team`:r.dup?" · same runner as another line":""}</div></div>
       <select id="pk-${i}" aria-label="Runner for ${esc(r.name||`line ${i+1}`)}">${opts.replace(`value="${v}"`,`value="${v}" selected`)}</select></div>`};
   return `<p class="small" style="margin:0"><b>${n} of ${rows.length}</b> time${rows.length===1?"":"s"} matched your roster. Check each match, and pick a runner for any line that didn't match.</p>
     ${hit.length?`<div class="list">${hit.map(row).join("")}</div>`:""}
@@ -1186,7 +1190,7 @@ function pasteFill(){
   (SH.rows||[]).forEach(r=>{const aid=pastePk(r); if(aid&&S.athletes[aid]&&!seen.has(aid)){seen.add(aid); picks.push([r,aid])}});
   if(!picks.length) return;
   const lbl="Before pasting results", last=snapList()[0]; // girls' then boys' tables: one snapshot, so older ones aren't pushed out
-  if(!(last&&last.label===lbl&&Date.now()-last.at<15*60e3)) snapshot(lbl);
+  const snapOK=(last&&last.label===lbl&&Date.now()-last.at<15*60e3)||snapshot(lbl);
   let al=false;
   SH.rows.forEach(r=>{if(!r.key||!(r.rec in SH.pick)) return; const v=SH.pick[r.rec];
     if(v&&v!==r.aid&&v!==r.dupOf&&S.athletes[v]&&aliasKey(r.key)){S.aliases[r.key]=v; al=true} // not for initials, one word, or a namesake line
@@ -1195,7 +1199,7 @@ function pasteFill(){
   picks.forEach(([r,aid])=>{d.t[aid]=maskTime(r.tok); if(r.place) d.p[aid]=String(r.place); d.chk[aid]=true});
   if(picks.some(([,aid])=>!entryShow(d,S.athletes[aid]))){d.grp="All"; d.gender="all"}
   d.dirty=true; closeSheet(); render();
-  toast(`Filled ${picks.length} time${picks.length===1?"":"s"}. Check them, then tap Save.`);
+  toast(`Filled ${picks.length} time${picks.length===1?"":"s"}. Check ${picks.length===1?"it":"them"}, then tap Save.${snapOK?"":" No snapshot was saved first because the phone is out of storage."}`);
 }
 
 function viewCalc(){
@@ -1245,7 +1249,7 @@ let SH=null;
 function openSheet(s){
   psGen++; psClear(); SH=s; const root=$("#sheetRoot");
   root.innerHTML=`<div class="scrim" data-act="closeSheet"></div><div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div>${sheetHTML(s)}</div>`;
-  requestAnimationFrame(()=>{root.querySelector(".scrim").classList.add("on");root.querySelector(".sheet").classList.add("on")});
+  requestAnimationFrame(()=>{root.querySelector(".scrim")?.classList.add("on");root.querySelector(".sheet")?.classList.add("on")});
   const f=root.querySelector("input:not([type=hidden]),select"); if(f&&!["copy","pacesheet","settings","paste"].includes(s.type)) setTimeout(()=>f.focus({preventScroll:true}),260);
 }
 function rerenderSheet(){const sh=document.querySelector("#sheetRoot .sheet");if(!sh||!SH) return;const st=sh.scrollTop;sh.innerHTML='<div class="grab"></div>'+sheetHTML(SH);sh.scrollTop=st}
@@ -1289,7 +1293,7 @@ function sheetHTML(s){
         <div class="field full"><span class="label" id="rCondL">Conditions</span><div class="chips multi" id="rCond" role="group" aria-labelledby="rCondL">${COND.map(x=>`<button type="button" class="chip" data-act="rcond" data-v="${x}" aria-pressed="${cond.includes(x)}">${x}</button>`).join("")}</div></div>
         <div class="field full"><label class="label" for="rNotes">Notes</label><input id="rNotes" value="${esc(r.notes)}" placeholder="Went out too fast, muddy second mile" autocomplete="off"></div>
       </div>
-      <label style="display:flex;gap:10px;align-items:center;font-weight:600"><input type="checkbox" id="rBasis" ${s.isBasis||!s.r?"checked":""} style="width:20px;height:20px;accent-color:var(--pine)"> Use for this runner's training paces</label>
+      <label style="display:flex;gap:10px;align-items:center;font-weight:600;min-height:40px"><input type="checkbox" id="rBasis" ${s.isBasis||!s.r?"checked":""} style="width:20px;height:20px;accent-color:var(--pine)"> Use for this runner's training paces</label>
       <p class="hint" id="rErr" style="color:var(--bad);margin:0" hidden></p>
       <div class="actions"><button type="button" class="btn ghost" data-act="closeSheet">Cancel</button><button class="btn" type="submit">${s.r?"Save":"Log result"}</button></div>
       ${s.r?`<button type="button" class="btn danger block" data-act="askDelResult">Delete entry</button><div id="delBox"></div>`:""}
@@ -1495,7 +1499,7 @@ document.addEventListener("click",e=>{
       const ok=lsSave(snap?1:0); U.athlete=null; entryForget(); closeSheet(); render(); if(ok) toast("Backup restored"); break;}
     case "unseed": {const snap=snapshot("Before removing sample runners"); // examples: no trash, but a snapshot just in case
       Object.values(S.athletes).filter(a=>a.sample).forEach(a=>{resultsFor(a.id).forEach(r=>delete S.results[r.id]);delete S.athletes[a.id]});
-      const ok=lsSave(snap?1:0); render(); if(ok) toast("Sample runners removed"); break;}
+      const ok=lsSave(snap?1:0); render(); if(ok) toast(snap?"Sample runners removed":"Sample runners removed. No snapshot was saved first because the phone is out of storage."); break;}
   }
 });
 document.addEventListener("input",e=>{
@@ -1552,12 +1556,12 @@ document.addEventListener("submit",async e=>{
     const r={...(SH.r||{created:Date.now()}),athleteId:aid,kind:$("#rKind").value,meet:$("#rMeet").value.trim(),date:$("#rDate").value||today(),distKey,meters,seconds:same?+SH.r.seconds:sec,adj,notes:$("#rNotes").value.trim()};
     if(cond.length) r.cond=cond; else delete r.cond;
     delete r.id; const wantBasis=$("#rBasis").checked, a=S.athletes[aid], wasNew=!SH.r, picked=!!SH.pickAthlete;
-    if(wasNew){U.rlast={dist:distKey,meters:meters||"",kind:r.kind,meet:r.meet,date:r.date,at:Date.now()};saveUI()} // prefills the next result
-    closeSheet(); await put("results",id,r);
+    closeSheet(); const ok=await put("results",id,r);
+    if(ok&&wasNew){U.rlast={dist:distKey,meters:meters||"",kind:r.kind,meet:r.meet,date:r.date,at:Date.now()};saveUI()} // prefills the next result
     if(wantBasis&&a.basisId!==id) await put("athletes",aid,{...a,basisId:id});
     else if(!wantBasis&&a.basisId===id) await put("athletes",aid,{...a,basisId:null});
     if(picked){U.athlete=aid;U.atab="ledger";render();scrollTo(0,0)}
-    toast(wasNew?"Result logged":"Result saved");
+    if(ok) toast(wasNew?"Result logged":"Result saved");
   }
 });
 addEventListener("scroll",()=>{const h=document.querySelector(".top");if(h)h.classList.toggle("scrolled",scrollY>4)},{passive:true});
@@ -1591,7 +1595,7 @@ function psCell(c,col,end){
 }
 // Race plan from the runner's Tinman equivalent time: finish, per-mile pace, or even-pace mile marks in whole seconds ("5:43 · 11:26 · 17:09")
 function raceCell(c,col){
-  const km=DMAP[col.dk].km, t=Tin.equiv(km,c.t3k), mi=km/1.609344;
+  const km=DMAP[col.dk].km, t=Math.round(Tin.equiv(km,c.t3k)*1e6)/1e6, mi=km/1.609344; // 1244.99999994 → 1245
   if(col.show==="pace") return fmt2(t/mi);
   if(col.show==="splits") return Array.from({length:Math.floor(mi+1e-9)},(_,i)=>fmt(t/mi*(i+1))).join(" · ");
   return fmt2(t);
