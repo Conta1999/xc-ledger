@@ -62,6 +62,7 @@ button{cursor:pointer}
 .top{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(14px + env(safe-area-inset-top,0px)) calc(16px + env(safe-area-inset-right,0px)) 10px calc(16px + env(safe-area-inset-left,0px));display:flex;align-items:center;gap:10px;border-bottom:1px solid transparent}
 .top.scrolled{border-bottom-color:var(--line)}
 .top h1{font:700 30px/1 var(--f-display);letter-spacing:.01em;margin:0;text-transform:uppercase;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top h1.mt{white-space:normal;font-size:26px;line-height:1.05;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow-wrap:anywhere} /* a meet name: up to two lines */
 .top .sub{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.06em;text-transform:uppercase}
 .iconbtn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;flex:none}
 .iconbtn svg{width:20px;height:20px}
@@ -94,14 +95,13 @@ button{cursor:pointer}
 /* chips & segmented */
 .chips{display:flex;gap:8px;overflow-x:auto;padding:2px 16px 4px;margin:0 -16px;scrollbar-width:none}
 .chips::-webkit-scrollbar{display:none}
-.chip{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 13px;font-size:13px;font-weight:600;white-space:nowrap}
+.chip{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 13px;min-height:40px;font-size:13px;font-weight:600;white-space:nowrap}
 .chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;background:var(--sunk);border-radius:12px;padding:3px;gap:3px}
-.seg button{border:0;background:transparent;border-radius:9px;padding:8px 6px;font-weight:600;font-size:13px;color:var(--muted)}
+.seg button{border:0;background:transparent;border-radius:9px;padding:8px 6px;min-height:40px;font-weight:600;font-size:13px;color:var(--muted)}
 .seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
 /* multi-select chips that wrap instead of scrolling (race conditions) */
 .chips.multi{flex-wrap:wrap;overflow:visible;margin:0;padding:0}
-.chips.multi .chip{min-height:40px}
 .label{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 
 /* roster */
@@ -224,8 +224,8 @@ table.t td .s{display:block;color:var(--muted);font-size:11.5px}
 .efoot{position:sticky;bottom:calc(65px + env(safe-area-inset-bottom,0px));z-index:4;margin-top:6px;padding:14px 16px 8px;background:linear-gradient(to bottom,transparent,var(--bg) 14px);display:flex;flex-direction:column;gap:6px}
 .efoot p{margin:0;font-size:12.5px;color:var(--muted);text-align:center}
 .efoot p.bad{color:var(--bad)}
-#eAdj{appearance:textfield;-moz-appearance:textfield}
-#eAdj::-webkit-inner-spin-button,#eAdj::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+#eAdj,#rAdj{appearance:textfield;-moz-appearance:textfield}
+#eAdj::-webkit-inner-spin-button,#eAdj::-webkit-outer-spin-button,#rAdj::-webkit-inner-spin-button,#rAdj::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 .check{display:flex;gap:10px;align-items:center;font-weight:600;min-height:40px}
 .check input{width:20px;height:20px;flex:none;accent-color:var(--pine)}
 .prow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,46%);gap:10px;align-items:center;padding:10px 10px 10px 14px;border-top:1px solid var(--line)}
@@ -334,7 +334,7 @@ function parseTime(s){
     const ss=+s.slice(-2), mm=+s.slice(-4,-2), hh=s.length>4?+s.slice(0,-4):0;
     return ss<60&&mm<60 ? hh*3600+mm*60+ss : NaN;
   }
-  const p=s.split(":"); if(p.length>3||p.some(x=>x===""||isNaN(+x))) return NaN;
+  const p=s.split(":"); if(p.length>3||p.some(x=>x===""||isNaN(+x))||p.slice(1).some(x=>+x>=60)) return NaN; // "16:79" is a typo, not 17:19
   return p.reduce((t,x)=>t*60+parseFloat(x),0);
 }
 function fmt(s,dec=0){
@@ -384,7 +384,7 @@ const paceOK = (sec,km) => {const p=sec/km; return p>=(km>=1.5?140:km>=.6?115:90
 // raw: what was typed; km: race distance; dl: its name ("5K", "4500m").
 function timeErr(raw,km,dl){
   const sec=parseTime(raw);
-  if(!isFinite(sec)||sec<=0) return "Enter the time, like 1745 for 17:45.";
+  if(!isFinite(sec)||sec<=0) return maskTime(raw).split(":").slice(1).some(x=>+x>=60) ? "Minutes and seconds only go up to 59. Check the time." : "Enter the time, like 1745 for 17:45.";
   if(!km||paceOK(sec,km)) return "";
   const read=sec<60?`${+sec.toFixed(2)} second${sec===1?"":"s"}`:fmtRace(sec), digits=String(raw).replace(/\D/g,""), alt=parseTime(digits);
   const what=/^[A-Z][a-z]/.test(dl)?"a "+dl.toLowerCase():dl; // "Mile" → "a mile"
@@ -403,6 +403,9 @@ function toast(msg){toastShow(msg)}
 function toastAction(msg,label,fn,focus){toastShow(msg,label,fn); if(focus) $("#toast button")?.focus({preventScroll:true})}
 function toastShow(msg,label,fn){
   const t=$("#toast"); toast._fn=fn||null;
+  // on the results entry page, sit above its sticky Save footer instead of covering the button
+  const f=U.view==="entry"&&!U.athlete?$("#eFoot"):null, ft=f?f.getBoundingClientRect().top:innerHeight;
+  t.style.bottom=f&&ft<innerHeight?`${Math.max(Math.round(innerHeight-ft+8),92)}px`:"";
   t.innerHTML=`<span>${esc(msg)}</span>${fn?`<button type="button" data-act="toastAct">${esc(label)}</button>`:""}`;
   t.classList.toggle("act",!!fn); t.classList.add("on"); toastHold(fn?6000:2000);
 }
@@ -418,6 +421,7 @@ async function copyText(text,fallback){
 
 /* ============ store: shared db when available, this device otherwise ============ */
 const APP_VERSION="1.4.0";
+const SW_CACHE="xc-ledger-v4"; // must equal CACHE in sw.js: bump both together
 const S = {athletes:{}, results:{}, trash:[], aliases:{}, mode:"loading"};
 const LS_KEY="xc-ledger-v1";
 const isObj = x=>!!x&&typeof x==="object"&&!Array.isArray(x);
@@ -425,16 +429,19 @@ function lsLoad(){try{const d=JSON.parse(localStorage.getItem(LS_KEY)||"{}");S.a
   S.trash=trashClean(d.trash);S.aliases=isObj(d.aliases)?d.aliases:{};
   if(Array.isArray(d.trash)&&d.trash.length!==S.trash.length) lsSave();}catch{}}
 // The roster matters more than old snapshots: if the phone is full, drop the oldest snapshot and try again.
-function lsSave(){const json=JSON.stringify({athletes:S.athletes,results:S.results,trash:S.trash,aliases:S.aliases}); let snaps;
-  for(;;){try{localStorage.setItem(LS_KEY,json);return true}catch{try{snaps??=localStorage.getItem(SNAP_KEY)}catch{} if(!snapDropOldest())break}}
+// keep: how many of the newest snapshots must stay (1 = the one just taken before a big change).
+function lsSave(keep=0){const json=JSON.stringify({athletes:S.athletes,results:S.results,trash:S.trash,aliases:S.aliases}); let snaps;
+  for(;;){try{localStorage.setItem(LS_KEY,json);return true}catch{try{snaps??=localStorage.getItem(SNAP_KEY)}catch{} if(!snapDropOldest(keep))break}}
   if(snaps!=null) try{localStorage.setItem(SNAP_KEY,snaps)}catch{} // dropping them didn't help, so put them back
-  toast("Couldn't save. Your phone may be out of storage."); return false}
+  setTimeout(()=>toast("Couldn't save. Your phone may be out of storage."),0); return false} // after any "done" toast, so this one shows
 
 /* trash: deleted runners and entries stay 30 days so they can be restored */
 const TRASH_DAYS=30;
 function trashClean(t){return (Array.isArray(t)?t:[]).filter(x=>isObj(x)&&x.tid&&isObj(x.data)&&(x.type==="athlete"||x.type==="result")&&Date.now()-(+x.at||0)<TRASH_DAYS*864e5)}
+// After a restore replaced the data: add the restored trash, and drop items that are back on the roster (a runner only once all their entries are back)
 function trashMerge(more){const have=new Set(S.trash.map(x=>x.tid));
-  return trashClean([...S.trash,...(Array.isArray(more)?more:[]).filter(x=>x&&!have.has(x.tid))]).sort((a,b)=>b.at-a.at)}
+  const back=x=>x.type==="result"?!!S.results[x.data.id]:!!S.athletes[x.data.id]&&(x.results||[]).every(r=>S.results[r?.id]);
+  return trashClean([...S.trash,...(Array.isArray(more)?more:[]).filter(x=>x&&!have.has(x.tid))]).filter(x=>!back(x)).sort((a,b)=>b.at-a.at)}
 function trashAdd(item){const tid=uid();S.trash.unshift({tid,at:Date.now(),...item});return tid}
 function trashAthlete(id){ // the runner and all their results become one trash item
   const a=S.athletes[id]; if(!a) return null; const rs=resultsFor(id);
@@ -449,16 +456,17 @@ function trashResult(id,noSave){ // noSave: caller saves once after a batch
 const trashRunner = aid => S.athletes[aid] || S.trash.find(x=>x.type==="athlete"&&x.data.id===aid)?.data || null;
 function restoreTrash(tid){ // "" when restored, otherwise why it can't be
   const i=S.trash.findIndex(x=>x.tid===tid), it=S.trash[i]; if(!it) return "That item is no longer in the trash.";
-  if(it.type==="athlete"){ S.athletes[it.data.id]=it.data; (it.results||[]).forEach(r=>{S.results[r.id]=r}); }
+  // A runner or entry that is already back (from a snapshot or backup) is never overwritten with this older copy
+  if(it.type==="athlete"){ if(!S.athletes[it.data.id]) S.athletes[it.data.id]=it.data; (it.results||[]).forEach(r=>{if(!S.results[r.id]) S.results[r.id]=r}); }
   else{
     const a=S.athletes[it.data.athleteId], gone=trashRunner(it.data.athleteId);
     if(!a) return gone ? `${gone.name} is in the trash too. Restore ${gone.name} first, then this entry.` : "This entry's runner was permanently deleted, so there's no ledger to put it back in.";
-    S.results[it.data.id]=it.data; if(it.basis&&!a.basisId) S.athletes[a.id]={...a,basisId:it.data.id}; // re-pin unless another basis was pinned since
+    if(!S.results[it.data.id]){ S.results[it.data.id]=it.data; if(it.basis&&!a.basisId) S.athletes[a.id]={...a,basisId:it.data.id}; } // re-pin unless another basis was pinned since
   }
   S.trash.splice(i,1); lsSave(); return "";
 }
 // Name-to-runner links from pasted results; keep only links to runners on the roster or in the trash.
-function aliasesClean(al){const o={};Object.entries(isObj(al)?al:{}).forEach(([k,v])=>{if(typeof v==="string"&&trashRunner(v))o[k]=v});return o}
+function aliasesClean(al){const o={};Object.entries(isObj(al)?al:{}).forEach(([k,v])=>{if(typeof v==="string"&&trashRunner(v)&&aliasKey(k))o[k]=v});return o}
 
 /* snapshots: a copy of the data saved before risky changes (newest first, last 3 kept) */
 const SNAP_KEY="xc-ledger-snapshots";
@@ -470,14 +478,17 @@ function snapshot(label){
   if(!snapshot._warned){snapshot._warned=true;toast("Couldn't save a snapshot. Your phone may be out of storage.")}
   return false;
 }
-function snapDropOldest(){const L=snapList();if(!L.length)return false;L.pop();
+function snapDropOldest(keep=0){const L=snapList();if(L.length<=keep)return false;L.pop();
   try{L.length?localStorage.setItem(SNAP_KEY,JSON.stringify(L)):localStorage.removeItem(SNAP_KEY);return true}catch{return false}}
-function snapRestore(at){
+// true: restored; false: that snapshot is gone; "nosnap": no room to save the current data first (nothing changed, unless force); "unsaved": restored but not saved
+function snapRestore(at,force){
   const s=snapList().find(x=>x.at===at); if(!s) return false;
-  snapshot("Before restoring a snapshot");
+  const snap=snapshot("Before restoring a snapshot"); if(!snap&&!force) return "nosnap";
   S.athletes=s.athletes; S.results=s.results; S.trash=trashMerge(s.trash); S.aliases=aliasesClean({...S.aliases,...(isObj(s.aliases)?s.aliases:{})});
-  lsSave(); return true;
+  return lsSave(snap?1:0)||"unsaved";
 }
+// When a snapshot can't be saved before a big change, the change waits for the coach to say go ahead anyway
+const NOSNAP = "There's no room on this phone to save a snapshot of your data first, so this can't be undone. Save a backup file first if you might need what's here now.";
 const SET={team:"",lastBackup:0};
 try{Object.assign(SET,JSON.parse(localStorage.getItem("xc-ledger-settings")||"{}"))}catch{}
 function saveSet(){try{localStorage.setItem("xc-ledger-settings",JSON.stringify(SET))}catch{}}
@@ -643,7 +654,7 @@ function banners(){
     h+=`<div class="banner warn" role="note"><p>You're in ${sf?"Safari":"a browser tab"}. Open XC Ledger from its Home Screen icon — ${sf?"Safari":"the browser"} keeps a separate copy, so your roster won't show here.</p>
       <button data-act="sfHelp" aria-expanded="${U.sfHelp}">How to install</button>
       ${U.sfHelp?`<ol class="steps"><li>Tap Share (the square with an up arrow). In Safari on newer iPhones, tap ··· first.</li><li>Tap Add to Home Screen, then Add.</li><li>Open XC Ledger from the new icon on your Home Screen. If the icon is already there, just open it.</li></ol>
-      ${mine?`<p class="more">Runners you added here stay here. To move them, tap the gear on the Roster tab, save a backup file, then restore it in the Home Screen app.</p>`:""}`:""}</div>`;}
+      ${mine?`<p class="more">Runners you added here stay here. If the Home Screen app has no runners yet, you can bring them over: tap the gear on the Roster tab, save a backup file, then restore it in the Home Screen app. Restoring replaces everything in that app, so if it already has your roster, enter these results there instead.</p>`:""}`:""}</div>`;}
   return h;
 }
 
@@ -815,11 +826,11 @@ const runBefore = (x,r) => (x.date||"")<(r.date||"") || (x.date||"")===(r.date||
 const seasonStart = iso => {const [y,m]=String(iso||"").split("-").map(Number); return y?`${y}-${m>=7?"07":"01"}-01`:""}; // Jul–Dec or Jan–Jun
 const longDate = iso => {const p=dparts(iso); return p.y?`${p.mo} ${p.dy}, ${p.y}`:""};
 const ord = n => n+(n%100>=11&&n%100<=13?"th":["th","st","nd","rd"][n%10]||"th");
-const gapTxt = d => {const t=Math.round(d*10)/10; return t<60?`${t%1?t.toFixed(1):t} s`:fmt(t)}; // "36 s", "2.5 s", "1:12"
+const gapTxt = d => {const t=Math.round(d*10)/10; return d>0&&t<.1?`${(Math.round(d*100)/100||.01).toFixed(2)} s`:t<60?`${t%1?t.toFixed(1):t} s`:fmt(t)}; // "36 s", "2.5 s", "0.04 s", "1:12"
 // What a result means for the runner, from their earlier races and time trials at the same distance:
 // First (first ever), PR (faster than every earlier one; by = seconds faster than the old PR), SB (fastest this season; by = vs the old season best)
 function rcMark(r,hist){
-  const k=dkey(r), sec=+r.seconds, prior=hist.filter(x=>x.id!==r.id&&dkey(x)===k&&runBefore(x,r));
+  const k=dkey(r), mk=meetKey(r), sec=+r.seconds, prior=hist.filter(x=>x.id!==r.id&&dkey(x)===k&&meetKey(x)!==mk&&runBefore(x,r)); // a second result in the same meet isn't an earlier race
   if(!prior.length) return {b:"First"};
   const best=Math.min(...prior.map(x=>+x.seconds));
   if(sec<best) return {b:"PR",by:best-sec};
@@ -838,7 +849,7 @@ function recapOf(m){
   const secs=Object.values(G).map(s=>{
     const rows=Object.values(s.by).map(r=>({r, a:S.athletes[r.athleteId], sec:+r.seconds, place:+r.place>0?+r.place:0, ...rcMark(r,hist[r.athleteId]||[])}))
       .sort((x,y)=>x.sec-y.sec||(x.place||1e9)-(y.place||1e9)||x.a.name.localeCompare(y.a.name));
-    rows.forEach((x,i)=>{x.tp=i&&x.sec===rows[i-1].sec?rows[i-1].tp:i+1}); // ties share a place
+    rows.forEach((x,i)=>{const p=rows[i-1]; x.tp=i&&x.sec===p.sec&&!(x.place&&p.place&&x.place!==p.place)?p.tp:i+1}); // equal times share a place unless entered overall places tell them apart
     const n=rows.length, avg=k=>rows.slice(0,k).reduce((t,x)=>t+x.sec,0)/k;
     return {g:s.g, km:s.km, dl:s.dl, label:s.label, rows, n, avg5:n>=5?avg(5):null, avg:n>1?avg(n):null, spread:n>=5?rows[4].sec-rows[0].sec:null, prs:rows.filter(x=>x.b==="PR").length};
   }).sort((x,y)=>(x.g==="f"?0:1)-(y.g==="f"?0:1)||y.km-x.km||y.n-x.n); // girls then boys, longer race first
@@ -860,7 +871,7 @@ const rcBadge = x => x.b?`<span class="pill ${x.b==="PR"?"pr":x.b==="SB"?"sb":"f
 function viewMeet(m){
   const R=recapOf(m), what=rcWhat(m,R);
   const head=`<header class="top"><button class="iconbtn" data-act="meetBack" aria-label="Back to meets">${I.back}</button>
-    <div style="flex:1;min-width:0"><div class="sub">${esc(longDate(m.date)||"Meet results")}</div><h1>${esc(meetName(m))}</h1></div>
+    <div style="flex:1;min-width:0"><div class="sub">${esc(longDate(m.date)||"Meet results")}</div><h1 class="mt">${esc(meetName(m))}</h1></div>
     <button class="iconbtn" data-act="recapOpen" aria-label="Share recap" ${R.secs.length?"":"disabled"}>${I.share}</button></header>`;
   const stat=(l,v)=>`<div class="stat"><div class="label">${l}</div><div class="v">${v}</div></div>`;
   return head+`<div class="wrap stack">${banners()}
@@ -951,7 +962,7 @@ function viewEntry(){
   if(d.grp!=="All"&&!gs.includes(d.grp)) d.grp="All";
   const rows=entryRows(d), t=entryTally(d), twice=[...new Set(d.extra.map(id=>S.results[id]?.athleteId))].filter(aid=>S.athletes[aid]).map(aid=>S.athletes[aid].name);
   const head=`<header class="top"><button class="iconbtn" data-act="entryBack" aria-label="Back to ${edit?"meet":"meets"}">${I.back}</button>
-    <div style="flex:1;min-width:0"><div class="sub">${edit?"Edit results":"Meets"}</div><h1>${edit?esc(d.title):"Enter results"}</h1></div></header>`;
+    <div style="flex:1;min-width:0"><div class="sub">${edit?"Edit results":"Meets"}</div><h1${edit?' class="mt"':""}>${edit?esc(d.title):"Enter results"}</h1></div></header>`;
   return head+`<div class="wrap stack">${banners()}
     ${d.resumed?`<div class="notice"><span style="flex:1;min-width:0">Picking up where you left off. Nothing is saved until you tap Save.</span><button data-act="entryReset">Start over</button></div>`:""}
     <div class="card stack">
@@ -1005,11 +1016,11 @@ function entryInput(el){
 function entrySave(){
   const d=draft(); if(!d) return;
   const fail=(msg,sel)=>{const p=$("#eErr"); if(p){p.textContent=msg;p.hidden=false} const f=sel&&$(sel); if(f){if(f.tagName==="INPUT")f.setAttribute("aria-invalid","true");f.focus()}};
-  const meet=String(d.meet).trim().replace(/\s+/g," "), meters=d.dist==="custom"?Math.round(+d.meters):null, adjS=String(d.adj).trim().replace("−","-"), adj=adjS?+adjS:0;
+  let meet=String(d.meet).trim().replace(/\s+/g," "); const meters=d.dist==="custom"?Math.round(+d.meters):null, adjS=String(d.adj).trim().replace("−","-"), adj=adjS?+adjS:0;
   if(!meet) return fail("Enter the meet name, like Conference championships.","#eMeet");
   if(!/^\d{4}-\d\d-\d\d$/.test(d.date)) return fail("Pick the meet date.","#eDate");
   if(d.dist==="custom"&&!(meters>=100)) return fail("Enter the distance in meters, 100 or more.","#eMeters");
-  if(!isFinite(adj)) return fail("Course adjustment must be a number of seconds, like -20.","#eAdj");
+  if(!isFinite(adj)||$("#eAdj")?.validity?.badInput) return fail("Course adjustment must be a number of seconds, like -20.","#eAdj");
   const aids=entryFilled(d), bad=aids.filter(aid=>entryErr(d,aid));
   if(bad.length){bad.forEach(aid=>{d.chk[aid]=true});
     if(bad.some(aid=>!entryShow(d,S.athletes[aid]))){d.grp="All";d.gender="all"}
@@ -1017,7 +1028,8 @@ function entrySave(){
     return;
   }
   if(!aids.length&&!entryTally(d).rm) return fail("Type at least one runner's time.");
-  const tk=meetKey({date:d.date,meet}), mine=new Set([...Object.values(d.ids),...d.extra]), there={};
+  const tk=meetKey({date:d.date,meet}), into=tk!==d.key?meetGet(tk):null, mine=new Set([...Object.values(d.ids),...d.extra]), there={};
+  if(into?.name) meet=into.name; // joining a meet saved with other spelling or capitals: keep its name
   (meetGet(tk)?.rs||[]).forEach(r=>{if(!mine.has(r.id)&&!there[r.athleteId]) there[r.athleteId]=r.id}); // already logged at this meet (e.g. on the result sheet): update it, don't add a second one
   const o=d.o, now=Date.now(), W=[], saved=[];
   // The meet's settings for one result. A result being edited that had its own setting keeps it.
@@ -1025,7 +1037,8 @@ function entrySave(){
     return {kind:k&&(r.kind||"race")!==o.kind?r.kind:d.kind, adj:k&&(+r.adj||0)!==o.adj?r.adj:adj, cond:k&&condKey(r)!==o.cond?condOf(r):d.cond,
       distKey:od?r.distKey:d.dist, meters:od?r.meters:meters}};
   const gone=Object.entries(d.ids).filter(([aid,id])=>S.results[id]&&!String(d.t[aid]||"").trim()).map(([,id])=>id);
-  gone.forEach(id=>trashResult(id,true)); // cleared times go to the trash (saved once below)
+  if(into) aids.forEach(aid=>{if(S.results[d.ids[aid]]&&there[aid]) gone.push(there[aid])}); // an edited meet moved onto one this runner is already in: the edited time replaces that one
+  gone.forEach(id=>trashResult(id,true)); // cleared or replaced times go to the trash (saved once below)
   aids.forEach(aid=>{
     const own=S.results[d.ids[aid]]?d.ids[aid]:null, id=own||there[aid]||uid(), r0=S.results[id], raw=String(d.t[aid]).trim(), h=hdr(r0,!!own);
     const r={...(r0||{created:now,notes:""}),athleteId:aid,meet,date:d.date,...h,seconds:own&&raw===d.t0?.[aid]?+r0.seconds:parseTime(raw)};
@@ -1035,12 +1048,15 @@ function entrySave(){
   });
   d.extra.forEach(id=>{const r0=S.results[id]; if(!r0) return; const h=hdr(r0,true), r={...r0,meet,date:d.date,...h};
     if(h.cond.length) r.cond=[...h.cond]; else delete r.cond; W.push(["results",id,r])});
-  if(d.basis) saved.forEach(([aid,id])=>{const a=S.athletes[aid]; if(a.basisId!==id) W.push(["athletes",aid,{...a,basisId:id}])});
+  let kept=0; // an older meet entered late: a runner with a newer race or time trial keeps their current paces
+  if(d.basis) saved.forEach(([aid,id])=>{const a=S.athletes[aid]; if(a.basisId===id) return;
+    if(Object.values(S.results).some(x=>x.athleteId===aid&&!mine.has(x.id)&&x.id!==id&&isRace(x)&&(x.date||"")>d.date)){kept++; return}
+    W.push(["athletes",aid,{...a,basisId:id}])});
   const ok=putBatch(W);
-  U.rlast={dist:d.dist,meters:meters||"",kind:d.kind,meet,date:d.date,at:now}; saveUI(); // the result sheet then prefills this meet
+  if(!d.key){U.rlast={dist:d.dist,meters:meters||"",kind:d.kind,meet,date:d.date,at:now}; saveUI()} // a newly entered meet prefills the result sheet (fixing an old meet doesn't)
   delete U.drafts[U.ek]; delete U.drafts[tk];
   U.view="meet"; U.meet=tk; render(); scrollTo(0,0); // the meet's results and recap (the Meets list if every time was cleared)
-  if(ok) toast([saved.length?`Saved ${nResults(saved.length)}`:"",gone.length?`${gone.length} moved to Trash`:""].filter(Boolean).join(" · "));
+  if(ok) toast([saved.length?`Saved ${nResults(saved.length)}`:"",gone.length?`${gone.length} moved to Trash`:"",kept?`Paces kept for ${nRunners(kept)} with a newer race`:""].filter(Boolean).join(" · "));
 }
 // Drafts of edited meets point at saved results; drop them when all the data is replaced
 function entryForget(){Object.keys(U.drafts).forEach(k=>{if(k!=="new") delete U.drafts[k]})}
@@ -1050,15 +1066,22 @@ function entryForget(){Object.keys(U.drafts).forEach(k=>{if(k!=="new") delete U.
 const normName = s => String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/['’`]/g,"").replace(/[^\p{L}]+/gu," ").trim();
 const PASTE_SKIP = new Set(["pr","sb","sr","jr","so","fr","dnf","dns","dq","place","name","athlete","grade","yr","team","school","time","pace","mark"]);
 const PLACE_RE = /^\d{1,4}\.?$/;
+const PASTE_OUT = /^--|(^|\s)(dnf|dns|dq|dsq|scr)(\s|$)/i; // a runner with no finish time (DNF, DNS, DQ)
 const pasteFields = s => s.split(/\t|\s{2,}/).map(f=>f.trim()).filter(Boolean);
 const isNameField = f => !f.includes(":")&&/\p{L}{2}/u.test(f)&&!PASTE_SKIP.has(normName(f));
 const nameRun = s => {const m=s.replace(/^\s*\d{1,4}[.)]?\s+/,"").match(/\p{L}[\p{L}'’.\-]+(?:,?\s+\p{L}[\p{L}'’.\-]*)*/u);
   return m&&!PASTE_SKIP.has(normName(m[0]))?m[0].replace(/[,.\s]+$/,""):""};
+// Athletic.net shows a runner with no photo as their initials ("JT") just before the name ("Jake Turner"): that cell isn't the name.
+// Initials: the first word's first letter, then first letters of later words, in order.
+const isAvatar = (f,next) => {if(!/^\p{Lu}{1,3}$/u.test(f)||!next) return false; const ws=normName(next).split(" "), cs=[...normName(f)]; let k=0;
+  return ws[0]?.[0]===cs[0] && cs.slice(1).every(c=>(k=ws.findIndex((w,j)=>j>k&&w[0]===c))>0)};
+// A remembered name needs two words, so initials or a lone last name never stand for a different runner
+const aliasKey = k => /\p{L}{2,} \p{L}/u.test(k||"");
 // The runner's name as written on a line. joined: a record pieced together from short lines, where it follows the place.
 function pasteName(rec,joined){
   const fs=pasteFields(rec);
   if(fs.length<2) return nameRun(rec);
-  const i=joined?fs.findIndex(f=>PLACE_RE.test(f)):-1, f=fs.find((f,k)=>k>i&&isNameField(f));
+  const i=joined?fs.findIndex(f=>PLACE_RE.test(f)):-1, f=fs.find((f,k)=>k>i&&isNameField(f)&&!isAvatar(f,fs[k+1]));
   return f?nameRun(f):"";
 }
 function pastePlace(rec,joined){ // the leading number, if any
@@ -1080,36 +1103,50 @@ function pasteKeys(){ // each runner's first and last name parts ("Ana María Lo
     return {id:a.id, first:(w[0]||"").split(" "), last:w.length>1?w[w.length-1].split(" "):[], full:w.join(" ")};
   }).filter(k=>k.full);
 }
-// The roster runner a pasted line is about: a remembered name first, then first and last name both on the line (longest match wins)
-function pasteFind(rec,name,keys){
-  const nk=normName(name), al=S.aliases[nk];
-  if(nk&&al&&S.athletes[al]) return {aid:al,alias:true};
-  const toks=normName(rec).split(" "), set=new Set(toks), ln=` ${toks.join(" ")} `, lastFirst=/\p{L},\s*\p{L}/u.test(rec);
-  const has=p=>p.every(x=>set.has(x))||set.has(p.join(""));
-  let best=null,bs=0,tie=false;
-  keys.forEach(k=>{
-    if(k.last.length ? !(has(k.first)&&has(k.last)) : nk!==k.full) return; // one-word names must match exactly
-    let s=k.full.split(" ").filter(x=>set.has(x)).join("").length;
-    if(ln.includes(` ${(lastFirst?[...k.last,...k.first]:[...k.first,...k.last]).join(" ")} `)) s+=.5; // written in name order
-    if(s>bs){best=k.id;bs=s;tie=false} else if(s===bs) tie=true;
-  });
-  return best&&!tie?{aid:best}:null;
+// The roster runner a pasted line is about, and how sure (tier): 3 a remembered name, 2 first and last name in the name itself,
+// 1 both somewhere on the line (Last and First in separate columns; or another team named like our runner). Longest match wins.
+// strict: the name itself only (a record pieced together from several lines, with a full name of its own, may hold a DNS runner's name too)
+function pasteFind(rec,name,keys,strict){
+  const nk=normName(name), al=aliasKey(nk)&&S.aliases[nk];
+  if(al&&S.athletes[al]) return {aid:al,alias:true,tier:3};
+  const look=src=>{
+    const toks=normName(src).split(" "), set=new Set(toks), ln=` ${toks.join(" ")} `, lastFirst=/\p{L},\s*\p{L}/u.test(src);
+    const has=p=>p.every(x=>set.has(x))||set.has(p.join(""));
+    let best=null,bs=0,tie=false;
+    keys.forEach(k=>{
+      if(k.last.length ? !(has(k.first)&&has(k.last)) : nk!==k.full) return; // one-word names must match exactly
+      let s=k.full.split(" ").filter(x=>set.has(x)).join("").length;
+      if(ln.includes(` ${(lastFirst?[...k.last,...k.first]:[...k.first,...k.last]).join(" ")} `)) s+=.5; // written in name order
+      if(s>bs){best=k.id;bs=s;tie=false} else if(s===bs) tie=true;
+    });
+    return best&&!tie?best:null;
+  };
+  const a=nk&&look(name); if(a) return {aid:a,tier:2};
+  const b=!strict&&look(rec); return b?{aid:b,tier:1}:null;
 }
 // Lines with a believable time become rows. A time on a line with no name (one cell per line) takes the short lines before it.
 function pasteParse(text,km){
-  const keys=pasteKeys(), out=[], buf=[], used=new Set();
+  const keys=pasteKeys(), out=[], buf=[];
+  const team=normName(SET.team).split(" ").filter(w=>w.length>2&&!/^(xc|high|school|cross|country|team|the|girls|boys|varsity|track|club)$/.test(w)); // "Lincoln XC" → lincoln
   String(text||"").split(/\r\n|\r|\n/).forEach(raw=>{
     const line=raw.replace(/ /g," ").trim(); if(!line) return;
     const t=pasteTime(line,km);
-    if(!t){buf.push(line); if(buf.length>6) buf.shift(); return}
+    if(!t){if(PASTE_OUT.test(line)) buf.length=0; else {buf.push(line); if(buf.length>6) buf.shift()} return} // a DNF / DNS / DQ line never lends its name to a later time
     let rec=line, joined=false;
-    if(buf.length){const all=[...buf,line].join("\t"), nm=pasteName(line,false);
+    if(buf.length){const nm=pasteName(line,false), all=[...(nm?buf.slice(-1):buf),line].join("\t"); // a time line with a name of its own joins only the line above ("1. Jordan Lee" / "12 Lincoln HS 16:58.20")
       if(!nm||(!pasteFind(line,nm,keys)&&pasteFind(all,pasteName(all,true),keys))){rec=all;joined=true}}
     buf.length=0;
-    const name=pasteName(rec,joined), m=pasteFind(rec,name,keys), dup=!!m&&used.has(m.aid);
-    if(m&&!dup) used.add(m.aid);
-    out.push({rec, sec:t.sec, tok:t.tok, place:pastePlace(rec,joined), name, key:normName(name), aid:m&&!dup?m.aid:"", alias:!!m?.alias&&!dup, dup});
+    const name=pasteName(rec,joined), m=pasteFind(rec,name,keys,joined&&normName(name).includes(" ")), rest=normName(name?rec.replace(name,""):rec).split(" ");
+    out.push({rec, sec:t.sec, tok:t.tok, place:pastePlace(rec,joined), name, key:normName(name), aid:m?m.aid:"", alias:!!m?.alias, dup:false,
+      tier:m?m.tier:0, w:m?m.tier*2+(team.some(w=>rest.includes(w))?1:0):0}); // a line that names our team wins a tie
   });
+  // A runner goes with one line: the surest match (remembered, then the name itself, then a line naming our team), else the first.
+  // The other lines default to Skip. A close call (equally sure, and not the same time listed again, as in team scores) flags both lines so the coach checks the team.
+  const win={};
+  out.forEach((r,i)=>{if(r.aid&&!(win[r.aid]>=0&&out[win[r.aid]].w>=r.w)) win[r.aid]=i});
+  out.forEach((r,i)=>{const k=win[r.aid]; if(!r.aid||k===i) return; const o=out[k];
+    if(r.tier===o.tier&&!r.rec.includes(o.tok)){r.clash=o.clash=true}
+    r.dupOf=r.aid; r.aid=""; r.alias=false; r.dup=true});
   return out;
 }
 const pastePk = r => SH?.pick && r.rec in SH.pick ? SH.pick[r.rec] : r.aid; // the coach's choice, else the match
@@ -1125,12 +1162,12 @@ function pasteOut(){
   if(!String(s.text||"").trim()) return `<p class="small" style="margin:0">Rows can be tab- or space-separated, with names as First Last or Last, First. Tables that paste one cell per line work too. Other teams' runners are skipped.</p>`;
   const rows=s.rows||[];
   if(!rows.length) return `<div class="notice">No times that fit ${esc(entryDl(d))} were found. Copy the whole results table, or go back and check the distance.</div>`;
-  const opts=pasteOpts(), hit=[], miss=[]; rows.forEach((r,i)=>(r.aid?hit:miss).push(i));
+  const opts=pasteOpts(), hit=[], miss=[], n=rows.filter(r=>r.aid).length; rows.forEach((r,i)=>(r.aid||r.clash?hit:miss).push(i)); // close calls show both lines
   const row=i=>{const r=rows[i], v=esc(pastePk(r));
     return `<div class="prow"><div style="min-width:0"><div class="name">${r.place?`${r.place}. `:""}${esc(r.name||"No name found")}</div>
-      <div class="small"><span class="num">${esc(r.tok)}</span>${r.alias?" · remembered":""}${r.dup?" · same runner as a line above":""}</div></div>
+      <div class="small"><span class="num">${esc(r.tok)}</span>${r.alias?" · remembered":""}${r.clash?` · ${r.dup?"same runner as":"also matches"} another line, check the team`:r.dup?" · same runner as another line":""}</div></div>
       <select id="pk-${i}" aria-label="Runner for ${esc(r.name||`line ${i+1}`)}">${opts.replace(`value="${v}"`,`value="${v}" selected`)}</select></div>`};
-  return `<p class="small" style="margin:0"><b>${hit.length} of ${rows.length}</b> time${rows.length===1?"":"s"} matched your roster. Check each match, and pick a runner for any line that didn't match.</p>
+  return `<p class="small" style="margin:0"><b>${n} of ${rows.length}</b> time${rows.length===1?"":"s"} matched your roster. Check each match, and pick a runner for any line that didn't match.</p>
     ${hit.length?`<div class="list">${hit.map(row).join("")}</div>`:""}
     ${miss.length?(s.more||!hit.length?`<div class="label">Didn't match · ${miss.length}</div><div class="list">${miss.map(row).join("")}</div>`
       :`<button type="button" class="btn ghost block" data-act="pasteMore">Show ${miss.length} line${miss.length===1?"":"s"} that didn't match</button>`):""}`;
@@ -1152,7 +1189,7 @@ function pasteFill(){
   if(!(last&&last.label===lbl&&Date.now()-last.at<15*60e3)) snapshot(lbl);
   let al=false;
   SH.rows.forEach(r=>{if(!r.key||!(r.rec in SH.pick)) return; const v=SH.pick[r.rec];
-    if(v&&v!==r.aid&&S.athletes[v]){S.aliases[r.key]=v; al=true}
+    if(v&&v!==r.aid&&v!==r.dupOf&&S.athletes[v]&&aliasKey(r.key)){S.aliases[r.key]=v; al=true} // not for initials, one word, or a namesake line
     else if(!v&&r.alias){delete S.aliases[r.key]; al=true}}); // a remembered match the coach turned off
   if(al) lsSave();
   picks.forEach(([r,aid])=>{d.t[aid]=maskTime(r.tok); if(r.place) d.p[aid]=String(r.place); d.chk[aid]=true});
@@ -1215,9 +1252,11 @@ function rerenderSheet(){const sh=document.querySelector("#sheetRoot .sheet");if
 function closeSheet(){psGen++;psClear();const root=$("#sheetRoot");const sh=root.querySelector(".sheet");if(!sh){SH=null;return}
   sh.classList.remove("on");root.querySelector(".scrim").classList.remove("on");setTimeout(()=>{root.innerHTML="";SH=null},220)}
 // New result: last used distance and type; also the meet and date if the last result was logged within 2 days (same meet, next runner).
+// The last type carries over, except Estimate for a runner who already has a race or time trial (or one not picked yet).
 function resultDraft(s){
   const L=U.rlast||{}, recent=!!L.at&&Date.now()-L.at<2*864e5;
-  return {kind:L.kind||"race", distKey:s.dist||L.dist||"5k", meters:s.dist?s.meters:L.dist==="custom"?L.meters:"", meet:recent?L.meet:"", date:recent&&L.date||today()};
+  const raced=!!s.pickAthlete||(!!s.aid&&resultsFor(s.aid).some(isRace)), kind=L.kind==="est"&&raced?"race":(L.kind||"race");
+  return {kind, distKey:s.dist||L.dist||"5k", meters:s.dist?s.meters:L.dist==="custom"?L.meters:"", meet:recent?L.meet:"", date:recent&&L.date||today()};
 }
 function sheetHTML(s){
   if(s.type==="athlete"){const a=s.a||{};const gs=groups();
@@ -1244,8 +1283,8 @@ function sheetHTML(s){
         <div class="field"><label class="label" for="rDate">Date</label><input id="rDate" type="date" value="${esc(r.date||today())}" required></div>
         <div class="field"><label class="label" for="rDist">Distance</label>${distSelect("rDist",r.distKey||s.dist||"5k")}</div>
         <div class="field full" id="rMetersWrap" ${(r.distKey||s.dist)==="custom"?"":"hidden"}><label class="label" for="rMeters">Distance in meters</label><input id="rMeters" inputmode="numeric" value="${esc(r.meters||s.meters||"")}" placeholder="4500"></div>
-        <div class="field"><label class="label" for="rTime">Time</label><input id="rTime" class="tin" inputmode="decimal" required value="${esc(r.seconds?fmtRace(+r.seconds):maskTime(s.time||""))}" placeholder="17:45" autocomplete="off" aria-describedby="rErr"></div>
-        <div class="field"><label class="label" for="rAdj">Course adj. (sec)</label><input id="rAdj" inputmode="decimal" value="${esc(r.adj||"")}" placeholder="-20"></div>
+        <div class="field"><label class="label" for="rTime">Time</label><input id="rTime" class="tin" inputmode="decimal" required value="${esc(r.seconds?tStr(+r.seconds):maskTime(s.time||""))}" placeholder="17:45" autocomplete="off" aria-describedby="rErr"></div>
+        <div class="field"><label class="label" for="rAdj">Course adj. (sec)</label><input id="rAdj" type="number" step="any" value="${esc(r.adj||"")}" placeholder="-20" autocomplete="off"></div>
         <div class="field full"><span class="hint">Course adjustment corrects for hills, mud or heat. Enter −20 if this course runs about 20 seconds slow; paces use the adjusted time.</span></div>
         <div class="field full"><span class="label" id="rCondL">Conditions</span><div class="chips multi" id="rCond" role="group" aria-labelledby="rCondL">${COND.map(x=>`<button type="button" class="chip" data-act="rcond" data-v="${x}" aria-pressed="${cond.includes(x)}">${x}</button>`).join("")}</div></div>
         <div class="field full"><label class="label" for="rNotes">Notes</label><input id="rNotes" value="${esc(r.notes)}" placeholder="Went out too fast, muddy second mile" autocomplete="off"></div>
@@ -1344,8 +1383,8 @@ function trashHTML(){
         <div class="small">${x.type==="athlete"?(n?`Runner and ${n} entr${n===1?"y":"ies"}`:"Runner"):"Entry"} · Deleted ${dayStamp(x.at)}</div>
         ${SH?.trashWhy?.tid===x.tid?`<div class="why">${esc(SH.trashWhy.msg)}</div>`:""}</div>
         <button type="button" class="btn ghost sm" data-act="trashRestore" data-v="${esc(x.tid)}">Restore</button></div>`}).join("")}</div>
-    ${SH?.trashAsk?`<div class="confirm" style="margin:0">Permanently delete ${t.length===1?"this item":`these ${t.length} items`}? A snapshot is saved first, so you can still get ${t.length===1?"it":"them"} back from Snapshots.
-      <div class="actions" style="margin:0"><button type="button" class="btn ghost" data-act="trashKeep">Keep</button><button type="button" class="btn" style="background:var(--bad)" data-act="trashEmpty">Empty trash</button></div></div>`
+    ${SH?.trashAsk?`<div class="confirm" style="margin:0">${SH.trashAsk==="nosnap"?esc(NOSNAP):`Permanently delete ${t.length===1?"this item":`these ${t.length} items`}? A snapshot is saved first, so you can still get ${t.length===1?"it":"them"} back from Snapshots.`}
+      <div class="actions" style="margin:0"><button type="button" class="btn ghost" data-act="trashKeep">Keep</button><button type="button" class="btn" style="background:var(--bad)" data-act="trashEmpty" ${SH.trashAsk==="nosnap"?'data-f="1"':""}>${SH.trashAsk==="nosnap"?"Empty anyway":"Empty trash"}</button></div></div>`
     :`<button type="button" class="btn danger block" data-act="trashAsk">Empty trash</button>`}`;
 }
 function snapsHTML(){
@@ -1354,8 +1393,8 @@ function snapsHTML(){
   return `<p class="small" style="margin:0">Copies of your data saved automatically before big changes. The last 3 are kept on this phone.</p>
     <div class="list">${L.map(x=>`<div class="srow"><div style="min-width:0"><div class="name">${esc(x.label||"Snapshot")}</div><div class="small">${snapWhen(x.at)} · ${size(x)}</div></div>
       <button type="button" class="btn ghost sm" data-act="snapAsk" data-v="${+x.at}">Restore</button></div>`).join("")}</div>
-    ${ask?`<div class="confirm" style="margin:0">Replace everything on this phone with the snapshot from ${snapWhen(ask.at)} (${size(ask)})? Your current data is saved as a snapshot first.
-      <div class="actions" style="margin:0"><button type="button" class="btn ghost" data-act="snapKeep">Cancel</button><button type="button" class="btn" data-act="snapRestore" data-v="${+ask.at}">Restore</button></div></div>`:""}`;
+    ${ask?`<div class="confirm" style="margin:0">${SH.snapNo?esc(NOSNAP):`Replace everything on this phone with the snapshot from ${snapWhen(ask.at)} (${size(ask)})? Your current data is saved as a snapshot first.`}
+      <div class="actions" style="margin:0"><button type="button" class="btn ghost" data-act="snapKeep">Cancel</button><button type="button" class="btn" data-act="snapRestore" data-v="${+ask.at}" ${SH.snapNo?'data-f="1"':""}>${SH.snapNo?"Restore anyway":"Restore"}</button></div></div>`:""}`;
 }
 // Redraw the Settings sections in place (keeps a typed team name and a pending restore), then move focus to `focus`.
 function setRefresh(focus){[["#setCount",setCountText],["#trashBox",trashHTML],["#snapBox",snapsHTML]].forEach(([id,f])=>{const el=$(id);if(el)el.innerHTML=f()});
@@ -1424,12 +1463,16 @@ document.addEventListener("click",e=>{
       setRefresh(); render(); break;}
     case "trashAsk": SH.trashAsk=true; setRefresh('[data-act="trashKeep"]'); break;
     case "trashKeep": SH.trashAsk=false; setRefresh('[data-act="trashAsk"]'); break;
-    case "trashEmpty": snapshot("Before emptying the trash"); S.trash=[]; S.aliases=aliasesClean(S.aliases); lsSave();
-      SH.trashAsk=false; SH.trashWhy=null; setRefresh(); toast("Trash emptied"); break;
-    case "snapAsk": SH.snapAsk=+v; setRefresh('[data-act="snapKeep"]'); break;
-    case "snapKeep": SH.snapAsk=null; setRefresh(); break;
-    case "snapRestore": if(!snapRestore(+v)){SH.snapAsk=null; setRefresh(); toast("That snapshot is no longer saved. Pick another one."); break}
-      U.athlete=null; entryForget(); closeSheet(); render(); toast("Snapshot restored"); break;
+    case "trashEmpty": {const force=!!t.dataset.f, snap=!force&&snapshot("Before emptying the trash");
+      if(!snap&&!force){SH.trashAsk="nosnap"; setRefresh('[data-act="trashKeep"]'); break} // no room for a snapshot: ask again, saying so
+      S.trash=[]; S.aliases=aliasesClean(S.aliases); const ok=lsSave(snap?1:0);
+      SH.trashAsk=false; SH.trashWhy=null; setRefresh(); if(ok) toast("Trash emptied"); break;}
+    case "snapAsk": SH.snapAsk=+v; SH.snapNo=false; setRefresh('[data-act="snapKeep"]'); break;
+    case "snapKeep": SH.snapAsk=null; SH.snapNo=false; setRefresh(); break;
+    case "snapRestore": {const ok=snapRestore(+v,!!t.dataset.f);
+      if(ok==="nosnap"){SH.snapNo=true; setRefresh('[data-act="snapKeep"]'); break}
+      if(ok===false){SH.snapAsk=null; SH.snapNo=false; setRefresh(); toast("That snapshot is no longer saved. Pick another one."); break}
+      U.athlete=null; entryForget(); closeSheet(); render(); if(ok===true) toast("Snapshot restored"); break;}
     case "copyPaces": copyText(pacesText(S.athletes[U.athlete])); break;
     case "copyWorkout": copyText(workoutText()); break;
     case "openPaceSheet": if(U.ps.grp!=="All"&&!groups().includes(U.ps.grp)){U.ps.grp="All";saveUI()} openSheet({type:"pacesheet"}); break;
@@ -1446,12 +1489,13 @@ document.addEventListener("click",e=>{
     case "seed": seed(); break;
     case "settings": openSheet({type:"settings"}); break;
     case "exportData": exportData(); break;
-    case "doImport": {const d=SH&&SH.pending; if(!d) break; snapshot("Before restoring a backup");
+    case "doImport": {const d=SH&&SH.pending; if(!d) break; const force=!!t.dataset.f, snap=!force&&snapshot("Before restoring a backup");
+      if(!snap&&!force){$("#importBox").innerHTML=`<div class="confirm">${esc(NOSNAP)}<div class="actions" style="margin:0"><button type="button" class="btn ghost" data-act="closeSheet">Cancel</button><button type="button" class="btn" data-act="doImport" data-f="1">Restore anyway</button></div></div>`; break}
       S.athletes=d.athletes; S.results=d.results; S.trash=trashMerge(d.trash); S.aliases=aliasesClean({...S.aliases,...(isObj(d.aliases)?d.aliases:{})});
-      lsSave(); U.athlete=null; entryForget(); closeSheet(); render(); toast("Backup restored"); break;}
-    case "unseed": snapshot("Before removing sample runners"); // examples: no trash, but a snapshot just in case
+      const ok=lsSave(snap?1:0); U.athlete=null; entryForget(); closeSheet(); render(); if(ok) toast("Backup restored"); break;}
+    case "unseed": {const snap=snapshot("Before removing sample runners"); // examples: no trash, but a snapshot just in case
       Object.values(S.athletes).filter(a=>a.sample).forEach(a=>{resultsFor(a.id).forEach(r=>delete S.results[r.id]);delete S.athletes[a.id]});
-      lsSave(); render(); toast("Sample runners removed"); break;
+      const ok=lsSave(snap?1:0); render(); if(ok) toast("Sample runners removed"); break;}
   }
 });
 document.addEventListener("input",e=>{
@@ -1502,9 +1546,10 @@ document.addEventListener("submit",async e=>{
     if(distKey==="custom"&&!(meters>=100)) return fail("Enter the distance in meters, 100 or more.");
     const terr=timeErr(raw,distKey==="custom"?meters/1000:DMAP[distKey].km,distKey==="custom"?`${meters}m`:DMAP[distKey].label);
     if(terr){$("#rTime").setAttribute("aria-invalid","true"); return fail(terr);}
-    if(isNaN(adj)) return fail("Course adjustment must be a number of seconds, like -20.");
+    if(isNaN(adj)||$("#rAdj").validity?.badInput) return fail("Course adjustment must be a number of seconds, like -20.");
     const id=SH.r?.id||uid(), cond=[...document.querySelectorAll('#rCond [aria-pressed="true"]')].map(b=>b.dataset.v);
-    const r={...(SH.r||{created:Date.now()}),athleteId:aid,kind:$("#rKind").value,meet:$("#rMeet").value.trim(),date:$("#rDate").value||today(),distKey,meters,seconds:sec,adj,notes:$("#rNotes").value.trim()};
+    const same=SH.r&&isFinite(+SH.r.seconds)&&raw===tStr(+SH.r.seconds); // an untouched time keeps exactly what was saved
+    const r={...(SH.r||{created:Date.now()}),athleteId:aid,kind:$("#rKind").value,meet:$("#rMeet").value.trim(),date:$("#rDate").value||today(),distKey,meters,seconds:same?+SH.r.seconds:sec,adj,notes:$("#rNotes").value.trim()};
     if(cond.length) r.cond=cond; else delete r.cond;
     delete r.id; const wantBasis=$("#rBasis").checked, a=S.athletes[aid], wasNew=!SH.r, picked=!!SH.pickAthlete;
     if(wasNew){U.rlast={dist:distKey,meters:meters||"",kind:r.kind,meet:r.meet,date:r.date,at:Date.now()};saveUI()} // prefills the next result
@@ -1858,7 +1903,10 @@ initStore();
 let swReg=null;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   let swHad=!!navigator.serviceWorker.controller;
-  navigator.serviceWorker.addEventListener("controllerchange",()=>{if(swHad&&!U.swNew){U.swNew=true;render()} swHad=true});
+  // The new worker deletes every other version's cache before it takes over, so if this page's own cache is still there, this page is the new version
+  navigator.serviceWorker.addEventListener("controllerchange",()=>{const had=swHad; swHad=true; if(!had||U.swNew) return;
+    const show=()=>{if(!U.swNew){U.swNew=true;render()}};
+    try{caches.has(SW_CACHE).then(same=>{if(!same) show()},show)}catch{show()}});
   navigator.serviceWorker.register("sw.js").then(r=>{swReg=r}).catch(()=>{});
   document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&swReg){try{swReg.update().catch(()=>{})}catch{}}});
 }
