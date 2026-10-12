@@ -448,8 +448,8 @@ table.t.plain th:first-child{font-weight:500}
 .sheet.on{transform:none;transition-duration:.3s}
 .sheet .grab{width:36px;height:5px;margin:8px auto 12px;border-radius:3px;background:color-mix(in oklab,var(--ink) 18%,transparent)}
 .sheet h2{margin:0 0 12px;font-size:20px;line-height:26px;font-weight:600;letter-spacing:-.02em}
-.actions{display:flex;gap:8px;margin-top:20px}
-.actions .btn{flex:1}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+.actions .btn{flex:1 1 0;min-width:max-content;white-space:nowrap} /* side by side when both labels fit, stacked when they don't */
 .actions.stick{position:sticky;bottom:calc(-20px - env(safe-area-inset-bottom,0px));z-index:2;margin:16px -20px calc(-20px - env(safe-area-inset-bottom,0px));
   padding:12px 20px calc(12px + env(safe-area-inset-bottom,0px));background:var(--overlay);box-shadow:0 -1px 0 var(--sep)}
 .sec{margin-top:20px;padding-top:20px;border-top:1px solid var(--sep)}
