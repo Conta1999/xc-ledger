@@ -19,7 +19,8 @@
 <style>
 /* Visual language after HeroUI v3 (heroui.com, Apache-2.0); values hand-ported, no HeroUI code shipped. */
 /* Layout: phone app shell. Sticky header, scrolling content, floating tab dock; athlete ledger pushes over the roster; forms open as bottom sheets. */
-/* Font shorthand resets font-variant-numeric, so components set weight/size/line-height as longhands and keep body's tabular numerals. */
+/* Components set weight/size/line-height as longhands (the font shorthand resets font-variant-numeric).
+   Tabular numerals are opt-in on numeric displays only: Inter's tnum also widens the hyphen, which would space out "López-García". */
 :root{
   --bg:#F5F5F5; --surface:#FFFFFF; --surface-2:#EFEFF0; --overlay:#FFFFFF;
   --sunk:#EBEBEC; --sunk-2:#E1E1E2;              /* HeroUI default / default-hover */
@@ -37,6 +38,8 @@
   --hero-bg:color-mix(in oklab,var(--acc-d) 16%,#141416);   /* team-tinted near-black, both modes */
   --switch-off:#DCDCDF;
   --chev:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2366666E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  /* warning icon for alerts, drawn as a mask in currentColor */
+  --ic-alert:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7.5v5.5M12 16.5v.01'/%3E%3C/svg%3E");
   --r-xs:6px; --r-field:12px; --r-md:16px; --r-alert:20px; --r-toast:22px; --r-card:24px; --r-pill:999px;
   --ease-out:cubic-bezier(0,0,.2,1); --ease-quart:cubic-bezier(.165,.84,.44,1); --ease-fluid:cubic-bezier(.32,.72,0,1);
   --f-body:"Inter",-apple-system,BlinkMacSystemFont,system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
@@ -98,14 +101,17 @@ html,body{margin:0;height:100%}
 html{background:var(--bg);-webkit-text-size-adjust:100%;text-size-adjust:100%}
 [hidden]{display:none!important}
 img{max-width:100%}
-body{background:var(--bg);color:var(--ink);font:400 15px/22px var(--f-body);font-variant-numeric:tabular-nums;font-synthesis:none;
+body{background:var(--bg);color:var(--ink);font:400 15px/22px var(--f-body);font-synthesis:none;
   -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;-webkit-tap-highlight-color:transparent;overscroll-behavior-y:none}
 button,input,select,textarea{font:inherit;color:inherit;letter-spacing:inherit}
 button{cursor:pointer}
 ::placeholder{color:var(--muted);opacity:1}
 :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+/* numbers that line up down a list or table */
+.right,.big,.zt,.wo-row .t,.grid2 .t,.grid2 .p,table.t,.hero .v,.date,.mrow .mpl,.ratingbig,.tin,.erow input{font-variant-numeric:tabular-nums}
 .right{text-align:right}
+.ell{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .small{font-size:13px;line-height:18px;color:var(--muted)}
 .label{font-size:13px;line-height:18px;font-weight:600;color:var(--muted)}
 .hint{display:block;margin:0;font-size:12px;line-height:16px;font-weight:400;color:var(--muted)}
@@ -138,6 +144,8 @@ button{cursor:pointer}
 }
 /* tab dock: a floating toolbar above the home indicator */
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;padding:0 max(12px,env(safe-area-inset-right,0px)) var(--dock-gap) max(12px,env(safe-area-inset-left,0px));background:none;border:0;pointer-events:none}
+.tabs::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none; /* rows fade out beside and below the dock */
+  background:linear-gradient(to bottom,color-mix(in oklab,var(--bg) 0%,transparent),color-mix(in oklab,var(--bg) 92%,transparent) 55%)}
 .tabs-in{pointer-events:auto;max-width:440px;height:var(--dock-h);margin:0 auto;padding:4px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2px;border-radius:30px;
   background:color-mix(in oklab,var(--surface) 82%,transparent);-webkit-backdrop-filter:blur(20px) saturate(1.8);backdrop-filter:blur(20px) saturate(1.8);
   box-shadow:var(--sh-overlay),inset 0 0 0 1px color-mix(in oklab,var(--ink) 6%,transparent)}
@@ -219,11 +227,12 @@ button{cursor:pointer}
 .row:active,.entry:active,.mrow:active{background:var(--press)}
 .row:focus-visible,.entry:focus-visible,.mrow:focus-visible{outline-offset:-2px}
 .row{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;min-height:68px;padding:12px 16px}
-.row+.row::before,.entry+.entry::before{content:"";position:absolute;top:0;right:0;left:72px;height:1px;background:var(--sep)} /* inset dividers */
+.row+.row::before,.entry+.entry::before,.mrow+.mrow::before{content:"";position:absolute;top:0;right:0;left:72px;height:1px;background:var(--sep)} /* inset dividers */
 .entry+.entry::before{left:80px}
+.mrow+.mrow::before{left:54px}
 .row .name{display:flex;align-items:center;gap:6px;min-width:0}
 .row .name .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.row .name .pill{flex:none}
+.row .meta .pill{height:18px;margin:-1px 6px 0 0;padding:0 7px;font-size:11px} /* sample runners: the tag rides on the meta line so the name keeps its room */
 .row .meta{margin-top:2px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* race-bib avatar */
 .bib{position:relative;overflow:hidden;flex:none;width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent-ink);font-size:15px;line-height:1;font-weight:600}
@@ -232,14 +241,19 @@ button{cursor:pointer}
 .bib.lg{width:64px;height:64px;border-radius:16px;font-size:22px;font-weight:700}
 .bib.lg::before,.bib.lg::after{top:7px;width:5px;height:5px}
 .bib.lg::before{left:7px}.bib.lg::after{right:7px}
+@media (max-width:359px){ /* the smallest phones give the runner's name the bib's room */
+  .row>.bib{display:none}
+  .row{grid-template-columns:minmax(0,1fr) auto}
+  .row+.row::before{left:16px}
+}
 .entry{position:relative;display:grid;grid-template-columns:52px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 16px}
-.entry .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.entry .name{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:break-word} /* a long meet name gets a second line before it's cut */
 .date{text-align:center;line-height:1}
 .date .mo{font-size:11px;line-height:14px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
 .date .dy{font-size:22px;line-height:24px;font-weight:600;letter-spacing:-.02em}
-.mrow{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 16px 10px 12px;border-top:1px solid var(--sep)}
-.mrow:first-child{border-top:0}
+.mrow{position:relative;display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:12px;align-items:center;min-height:66px;padding:10px 16px 10px 12px}
 .mrow .mpl{text-align:center;font-size:16px;line-height:20px;font-weight:600;color:var(--muted)}
+.mrow:nth-child(-n+5) .mpl{color:var(--accent-ink)} /* the five who score */
 .mrow .name,.mrow .small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mrow .right .small{margin-top:3px}
 .zone{display:grid;grid-template-columns:4px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 16px 12px 12px;border-top:1px solid var(--sep)}
@@ -254,6 +268,11 @@ button{cursor:pointer}
 .wo-row .t{text-align:right;white-space:nowrap;font-size:16px;line-height:20px;font-weight:600}
 .wo-row .t small{display:block;max-width:144px;margin:2px 0 0 auto;white-space:normal;font-size:12px;line-height:16px;font-weight:400;color:var(--muted)}
 .wosum{font-size:18px;line-height:24px;font-weight:600;letter-spacing:-.01em}
+/* workout summary: the zone's color as a bar beside what's being run */
+.wocard{display:flex;align-items:center;gap:12px;padding:12px 16px 12px 12px}
+.wocard .wobar{flex:none;align-self:stretch;width:6px;border-radius:999px;background:var(--zc)}
+.wocard>div{flex:1;min-width:0}
+.wocard .small{margin-top:2px}
 .srow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 12px 12px 16px;border-top:1px solid var(--sep)}
 .srow:first-child{border-top:0}
 .srow .name{overflow-wrap:anywhere}
@@ -266,6 +285,7 @@ button{cursor:pointer}
 /* equivalent-times grid: hairlines drawn by each cell, the outer ones hidden under the list's edge */
 .grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:0;margin:0 -1px -1px 0;background:none}
 .grid2>div{padding:10px 16px;background:none;box-shadow:inset -1px -1px 0 var(--sep)}
+.grid2>div:last-child{box-shadow:inset 0 -1px 0 var(--sep)} /* a lone last cell leaves open space, not an empty box */
 .grid2 .d{font-size:12px;line-height:16px;font-weight:500;color:var(--muted)}
 .grid2 .t{font-size:17px;line-height:22px;font-weight:600;letter-spacing:-.01em}
 .grid2 .p{font-size:12px;line-height:16px;color:var(--muted)}
@@ -274,6 +294,8 @@ button{cursor:pointer}
 .empty{display:flex;flex-direction:column;align-items:center;gap:12px;padding:32px 20px;text-align:center}
 .empty h2{margin:0;font-size:20px;line-height:26px;font-weight:600;letter-spacing:-.02em}
 .empty p{margin:0;max-width:34ch;color:var(--muted)}
+.eico{width:64px;height:64px;border-radius:16px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent-ink)} /* empty-state icon, same footprint as the roster's XC bib */
+.eico svg{width:30px;height:30px}
 /* tables (calculator) */
 .scrollx{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 .scrollx::-webkit-scrollbar{display:none}
@@ -283,10 +305,16 @@ table.t tr:last-child td{border-bottom:0}
 table.t th{font-size:12px;line-height:16px;font-weight:500;color:var(--muted);background:var(--surface)}
 table.t td:first-child,table.t th:first-child{position:sticky;left:0;z-index:1;text-align:left;background:var(--surface);font-weight:600}
 table.t td .s{display:block;font-size:12px;line-height:16px;color:var(--muted)}
+.zsw{display:inline-block;width:8px;height:8px;margin-right:8px;border-radius:50%;background:var(--zc);vertical-align:1px}
 table.t.plain td:first-child,table.t.plain th:first-child{position:static;text-align:right}
 table.t.plain td:first-child{font-weight:400}
 table.t.plain th:first-child{font-weight:500}
 .ratingbig{font-size:44px;line-height:48px;font-weight:700;letter-spacing:-.03em}
+.ratecard{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.ratecard .ratingbig{margin-top:2px}
+.ratecard .small{max-width:44ch}
+.ratecard .btn{margin-top:4px}
+.notes{margin-top:6px;white-space:pre-wrap;overflow-wrap:anywhere}
 /* hero: team-tinted dark card on the runner and meet pages */
 .hero{position:relative;overflow:hidden;display:grid;gap:14px;padding:16px;border-radius:var(--r-card);background:var(--hero-bg);color:var(--hero-fg);
   box-shadow:var(--sh-surface),inset 0 0 0 1px var(--hero-edge)}
@@ -356,6 +384,7 @@ table.t.plain th:first-child{font-weight:500}
 .erow{border-top:1px solid var(--sep)}
 .erow .name,.erow .small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .erow .eerr{grid-column:1/-1;margin:0;font-size:12px;line-height:16px;color:var(--bad)}
+@media (max-width:359px){.ehead,.erow{grid-template-columns:minmax(0,1fr) 84px 48px;gap:6px;padding-left:14px;padding-right:10px}}
 .efoot{position:sticky;bottom:var(--dock-clear);z-index:4;margin-top:8px;padding:20px 16px 8px;background:linear-gradient(to bottom,transparent,var(--bg) 20px);display:flex;flex-direction:column;gap:6px}
 .efoot p{margin:0;font-size:12px;line-height:16px;color:var(--muted);text-align:center}
 .efoot p.bad{color:var(--bad)}
@@ -372,6 +401,9 @@ table.t.plain th:first-child{font-weight:500}
 .notice.warn b,.notice.bk.due b{color:inherit}
 .notice.bk.warn{background:var(--danger-soft);color:var(--ink);box-shadow:none}
 .notice.bk.warn b{color:var(--bad)}
+/* status icon (HeroUI Alert indicator) on warnings; the backup line stays compact beside its button */
+.notice.warn:not(.bk)::before{content:"";flex:none;width:20px;height:20px;margin-left:-2px;background:currentColor;
+  -webkit-mask:var(--ic-alert) center/contain no-repeat;mask:var(--ic-alert) center/contain no-repeat}
 .banner{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;min-height:48px;padding:10px 10px 10px 16px;border-radius:var(--r-alert);font-size:14px;line-height:20px}
 .banner p{margin:0;flex:1 1 140px;min-width:0}
 .banner.upd{background:var(--accent-soft);color:var(--ink)}
@@ -792,8 +824,8 @@ function viewRoster(){
       const trend = prev&&cur ? cur.rating-prev.rating : 0;
       return `<button class="row" data-act="open" data-id="${a.id}">
         <div class="bib">${esc(initials(a.name))}</div>
-        <div style="min-width:0"><div class="name"><span class="nm">${esc(a.name)}</span>${a.sample?'<span class="pill sample">Sample</span>':""}</div>
-        <div class="meta">${[a.grade?`Gr ${esc(a.grade)}`:"",esc(a.group||""),`${rs.length} entr${rs.length===1?"y":"ies"}`].filter(Boolean).join(" · ")}</div></div>
+        <div style="min-width:0"><div class="name"><span class="nm">${esc(a.sample?String(a.name).replace(/^Sample · /,""):a.name)}</span></div>
+        <div class="meta">${a.sample?'<span class="pill sample">Sample</span>':""}${[a.grade?`Gr ${esc(a.grade)}`:"",esc(a.group||""),`${rs.length} entr${rs.length===1?"y":"ies"}`].filter(Boolean).join(" · ")}</div></div>
         <div class="right">${c?`<div class="big">${fmtEq(Tin.equiv(5,c.t3k))}</div><div class="small">5K eq · ${(c.rating*100).toFixed(1)}%${estPace(c)?" · est.":""}${trend?` <span class="${trend>0?"up":"down"}">${trend>0?"▲":"▼"}</span>`:""}</div>`:`<div class="small">No results yet</div>`}</div>
       </button>`}).join("")||`<div class="empty"><p>No runners match these filters.</p></div>`}</div>
   </div>`;
@@ -871,10 +903,10 @@ function viewAthlete(a){
       const dl= rc&&pc ? (rc.rating-pc.rating)*100 : null; const p=dparts(r.date), cond=condOf(r);
       return `<button class="entry" data-act="editResult" data-id="${r.id}">
         <div class="date"><div class="mo">${p.mo}</div><div class="dy">${p.dy}</div></div>
-        <div style="min-width:0"><div class="name" style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.meet||(isEst(r)?"Coach estimate":kindLabel(r.kind)))}</div>
+        <div style="min-width:0"><div class="name">${esc(r.meet||(isEst(r)?"Coach estimate":kindLabel(r.kind)))}</div>
           <div class="small">${esc(distLabel(r))} · ${isEst(r)?'<span class="pill est">Estimate</span>':kindLabel(r.kind)}${prs.has(r.id)?' <span class="pill pr">PR</span>':""}${c&&c.basis.id===r.id?' <span class="pill basis">Pace basis</span>':""}</div>
-          ${cond.length?`<div class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cond.join(" · "))}</div>`:""}
-          ${r.notes?`<div class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.notes)}</div>`:""}</div>
+          ${cond.length?`<div class="small ell">${esc(cond.join(" · "))}</div>`:""}
+          ${r.notes?`<div class="small ell">${esc(r.notes)}</div>`:""}</div>
         <div class="right"><div class="big">${fmtRace(+r.seconds)}</div><div class="small">${rc?(rc.rating*100).toFixed(1)+"%":""}${dl!=null&&Math.abs(dl)>=.05?` <span class="${dl>0?"up":"down"}">${dl>0?"+":""}${dl.toFixed(1)}</span>`:""}</div></div>
       </button>`}).join("")}</div>
       <p class="small" style="margin:0">Tap an entry to edit it or make it the pace basis. Rating change compares to the previous race or time trial. Estimates don't count for PRs or the trend.</p>`
@@ -888,7 +920,7 @@ function viewAthlete(a){
   }
   return head+`<div class="wrap stack">${banners()}${hero}
     <div class="seg"><button data-act="atab" data-v="paces" aria-pressed="${U.atab==="paces"}">Paces</button><button data-act="atab" data-v="ledger" aria-pressed="${U.atab==="ledger"}">Ledger · ${rs.length}</button><button data-act="atab" data-v="equiv" aria-pressed="${U.atab==="equiv"}">Equivalents</button></div>
-    ${body}${a.notes?`<div class="card"><div class="label">Coach notes</div><div style="white-space:pre-wrap;margin-top:6px">${esc(a.notes)}</div></div>`:""}</div>`;
+    ${body}${a.notes?`<div class="card"><div class="label">Coach notes</div><div class="notes">${esc(a.notes)}</div></div>`:""}</div>`;
 }
 
 function viewWorkout(){
@@ -938,14 +970,14 @@ function woCell(c){
 function woOut(){
   const w=U.wo, z=ZONES[w.zone], tm=w.mode==="time", L=woLoop(), rows=woRows();
   const ok=!z.maxM||w.rep<=z.maxM+.5, over=tm&&z.maxM&&rows.some(r=>r.c&&!woDist(r.c,z,w.sec));
-  return `<div class="card" style="padding:12px 14px;display:flex;gap:12px;align-items:center">
-      <span style="width:6px;align-self:stretch;border-radius:3px;background:var(${z.c})"></span>
-      <div style="flex:1"><div class="wosum">${tm?fmt(w.sec):repLabel(w.rep)} @ ${z.n}</div><div class="small">${z.d}. ${tm?`Slow–fast distance covered in ${fmt(w.sec)}${L?` on a ${L}m loop`:""}`:"Slow–fast range per rep"}${z.maxM?`, for reps up to ${z.maxM}m`:""}.</div></div>
+  return `<div class="card wocard" style="--zc:var(${z.c})">
+      <span class="wobar" aria-hidden="true"></span>
+      <div><div class="wosum">${tm?fmt(w.sec):repLabel(w.rep)} @ ${z.n}</div><div class="small">${z.d}. ${tm?`Slow–fast distance covered in ${fmt(w.sec)}${L?` on a ${L}m loop`:""}`:"Slow–fast range per rep"}${z.maxM?`, for reps up to ${z.maxM}m`:""}.</div></div>
     </div>
     ${!tm&&!ok?`<div class="notice warn">${z.n} is meant for reps of ${z.maxM}m or less. Pick a shorter rep.</div>`:""}
     ${over?`<div class="notice warn">${z.n} is meant for reps of ${z.maxM}m or less, so runners who would cover more show a dash. Pick a shorter time.</div>`:""}
     <div class="list">${rows.length?rows.map(({a,c})=>{const t=woCell(c);
-      return `<div class="wo-row"><div style="min-width:0"><div class="name" style="font-weight:600">${esc(a.name)}</div><div class="small">${c?[`${(c.rating*100).toFixed(1)}%`,estPace(c)?"Estimated":"",esc(a.group||"")].filter(Boolean).join(" · "):"No results yet"}</div></div>
+      return `<div class="wo-row"><div style="min-width:0"><div class="name">${esc(a.name)}</div><div class="small">${c?[`${(c.rating*100).toFixed(1)}%`,estPace(c)?"Estimated":"",esc(a.group||"")].filter(Boolean).join(" · "):"No results yet"}</div></div>
       <div class="t">${t?t[0]:"–"}${t&&t[1]?`<small>${t[1].split(" – ").map(x=>x.replace(/ /g,"&nbsp;")).join("&nbsp;– ")}</small>`:""}</div></div>`}).join(""):`<div class="empty"><p>No runners here yet. Add runners on the Roster tab.</p></div>`}</div>
     ${rows.length?`<button class="btn ghost block" data-act="copyWorkout">${I.copy}Copy split sheet</button>`:""}`;
 }
@@ -972,7 +1004,7 @@ function viewMeets(){
     <button class="btn" data-act="entryNew">${I.plus}Enter results</button></header>`;
   const resume=nt?`<div class="notice"><span style="flex:1;min-width:0">${nt} unsaved time${nt===1?"":"s"}${nd.meet.trim()?` for ${esc(nd.meet.trim())}`:""}.</span><button data-act="entryNew">Continue</button></div>`:"";
   if(!ms.length) return head+`<div class="wrap stack">${banners()}${resume}
-    <div class="card empty"><h2>No meets yet</h2>
+    <div class="card empty"><div class="eico" aria-hidden="true">${I.meets}</div><h2>No meets yet</h2>
       <p>Enter a whole meet at once: type each runner's time, or paste the results from Athletic.net. Every runner's ledger and training paces update together.</p>
       <button class="btn block" data-act="entryNew">${I.plus}Enter results</button></div></div>`;
   const yrs=new Set(ms.map(m=>m.date.slice(0,4))).size>1; let yr="";
@@ -984,7 +1016,7 @@ function viewMeets(){
         <div class="date"><div class="mo">${p.mo}</div><div class="dy">${p.dy}</div></div>
         <div style="min-width:0"><div class="name">${esc(meetName(m))}</div>
           <div class="small">${esc(dists.join(" · "))}${tt?" · Time trial":""}</div>
-          ${cond.length?`<div class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cond.join(" · "))}</div>`:""}</div>
+          ${cond.length?`<div class="small ell">${esc(cond.join(" · "))}</div>`:""}</div>
         <div class="right"><div class="big">${n}</div><div class="small">runner${n===1?"":"s"}</div></div></button>`}).join("")}</div>
     <p class="small" style="margin:0">Tap a meet to see team places, PRs and a recap to share. Estimates don't count as meets, so they aren't listed.</p>
   </div>`;
@@ -1393,9 +1425,9 @@ function renderCalcOut(){
   const c=Tin.base(km,sec,k.gender), per=sec/km;
   const cols=[["Mile",1609.344],["1600",1600],["1000",1000],["800",800],["600",600],["500",500],["400",400],["300",300],["200",200],["100",100]];
   out.innerHTML=`
-    <div class="card" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <div class="card ratecard">
       <div><div class="label">Rating</div><div class="ratingbig">${(c.rating*100).toFixed(1)}%</div></div>
-      <div class="small" style="flex:1;min-width:160px">100% is the estimated limit of human performance. Girls' ratings include the 11% gender adjustment.</div>
+      <div class="small">100% is the estimated limit of human performance. Girls' ratings include the 11% gender adjustment.</div>
       <button class="btn" data-act="saveCalc">${I.plus}Save to a runner</button>
     </div>
     <div class="label">Race splits at this pace</div>
@@ -1403,7 +1435,7 @@ function renderCalcOut(){
       <tr>${[1.609344,1.6,1,.8,.4,.2].map(x=>`<td style="text-align:right">${fmtT(per*x)}</td>`).join("")}</tr></table></div>
     <div class="label">Training paces · flat ground</div>
     <div class="list scrollx"><table class="t"><tr><th>Intensity</th>${cols.map(([l])=>`<th>${l}</th>`).join("")}</tr>
-      ${ZONES.map(z=>`<tr><td><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(${z.c});margin-right:6px"></span>${z.n}</td>${cols.map(([,m])=>{const p=Tin.zone(c.v,z,m);return `<td>${p?`${fmtT(p[0])}<span class="s">${fmtT(p[1])}</span>`:"–"}</td>`}).join("")}</tr>`).join("")}
+      ${ZONES.map(z=>`<tr><td><span class="zsw" style="--zc:var(${z.c})" aria-hidden="true"></span>${z.n}</td>${cols.map(([,m])=>{const p=Tin.zone(c.v,z,m);return `<td>${p?`${fmtT(p[0])}<span class="s">${fmtT(p[1])}</span>`:"–"}</td>`}).join("")}</tr>`).join("")}
     </table></div>
     <div class="label">Equivalent race times</div>
     <div class="list"><div class="grid2">${EQUIV.map(([l,kk])=>{const t=Tin.equiv(kk,c.t3k);return `<div><div class="d">${l}</div><div class="t">${fmtT(t)}</div><div class="p">${fmtT(t/kk*1.609344)} /mi</div></div>`}).join("")}</div></div>`;
