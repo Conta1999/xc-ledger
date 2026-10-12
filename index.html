@@ -98,6 +98,9 @@ button{cursor:pointer}
 .seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;background:var(--sunk);border-radius:12px;padding:3px;gap:3px}
 .seg button{border:0;background:transparent;border-radius:9px;padding:8px 6px;font-weight:600;font-size:13px;color:var(--muted)}
 .seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+/* multi-select chips that wrap instead of scrolling (race conditions) */
+.chips.multi{flex-wrap:wrap;overflow:visible;margin:0;padding:0}
+.chips.multi .chip{min-height:40px}
 .label{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 
 /* roster */
@@ -120,6 +123,7 @@ button{cursor:pointer}
 .pill.pr{background:var(--flag);color:#3A2B00}
 .pill.basis{background:var(--pine-soft);color:var(--pine)}
 .pill.sample{background:var(--flag);color:#3A2B00}
+.pill.est{background:transparent;color:var(--muted);box-shadow:inset 0 0 0 1px var(--line)}
 .notice{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:12px;background:var(--sunk);font-size:13px;color:var(--muted)}
 .notice button{margin:-8px -6px -8px auto;flex:none;border:0;background:none;color:var(--pine);font-weight:700;padding:4px 8px;min-height:40px;border-radius:10px}
 /* backup status (roster) and banners (Safari tab, new version) */
@@ -183,6 +187,7 @@ button{cursor:pointer}
 .field input,.field select,.field textarea{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:11px 12px;width:100%;min-width:0;font-size:16px}
 .field textarea{min-height:70px;resize:vertical}
 .field .hint{font-size:12px;color:var(--muted)}
+.field input[aria-invalid="true"]{border-color:var(--bad);box-shadow:0 0 0 1px var(--bad)}
 .fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .fields .full{grid-column:1/-1}
 .scrollx{overflow-x:auto;-webkit-overflow-scrolling:touch}
@@ -198,6 +203,10 @@ table.t td .s{display:block;color:var(--muted);font-size:11.5px}
 .wo-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:11px 14px;border-top:1px solid var(--line)}
 .wo-row:first-child{border-top:0}
 .wo-row .t{font:600 16px/1.2 var(--f-num);text-align:right;white-space:nowrap}
+.wo-row .t small{display:block;font:500 12px/1.3 var(--f-num);color:var(--muted);white-space:normal;margin:2px 0 0 auto;max-width:144px}
+.woloop{display:flex;align-items:center;gap:10px}
+.woloop input{flex:none;width:96px;min-height:40px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:8px 12px;font-size:16px}
+.woloop .small{flex:1;min-width:0}
 .grouphead{padding:8px 14px;background:var(--sunk);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 
 /* sheet */
@@ -322,6 +331,34 @@ const distLabel = r => r.distKey==="custom" ? `${r.meters}m` : (DMAP[r.distKey]?
 const distKm = r => r.distKey==="custom" ? (+r.meters||0)/1000 : DMAP[r.distKey]?.km;
 const repLabel = m => (REPS.find(r=>Math.abs(r[0]-m)<.5)||[m,m+"m"])[1];
 
+/* ============ race-time entry (iPhone number pad has no colon key) ============ */
+// Inputs with class "tin": digits and one "." only; colons go in from the right every 2 digits ("1832" → "18:32", "10230" → "1:02:30", "2143.5" → "21:43.5").
+function maskTime(v){
+  const s=String(v??"").replace(/,/g,".").replace(/[^\d.]/g,""), i=s.indexOf(".");
+  const whole=i<0?s:s.slice(0,i), frac=i<0?"":"."+s.slice(i+1).replace(/\./g,"");
+  return whole.replace(/\B(?=(\d{2})+(?!\d))/g,":")+frac;
+}
+function maskTin(el){const m=maskTime(el.value); if(m===el.value) return; el.value=m; try{el.setSelectionRange(m.length,m.length)}catch{}}
+// Believable race pace: 2:20 to 15:00 per km (short track races may run a little faster).
+const paceOK = (sec,km) => {const p=sec/km; return p>=(km>=1.5?140:km>=.6?115:90) && p<=900};
+// "" when the typed time works for this distance, otherwise what's wrong and how to fix it.
+// raw: what was typed; km: race distance; dl: its name ("5K", "4500m").
+function timeErr(raw,km,dl){
+  const sec=parseTime(raw);
+  if(!isFinite(sec)||sec<=0) return "Enter the time, like 1745 for 17:45.";
+  if(!km||paceOK(sec,km)) return "";
+  const read=sec<60?`${+sec.toFixed(2)} second${sec===1?"":"s"}`:fmtRace(sec), digits=String(raw).replace(/\D/g,""), alt=parseTime(digits);
+  const what=/^[A-Z][a-z]/.test(dl)?"a "+dl.toLowerCase():dl; // "Mile" → "a mile"
+  if(/\./.test(raw)&&!/:/.test(raw)&&alt>0&&paceOK(alt,km)) return `That reads as ${read} for ${what}. Type ${digits} for ${maskTime(digits)}.`;
+  return `That reads as ${read} for ${what}, which is too ${sec/km>900?"slow":"fast"} to be right. Check the time and the distance.`;
+}
+/* result kinds and race conditions */
+const KINDS=[["race","Race"],["tt","Time trial"],["est","Estimate"]];
+const kindLabel = k => ({race:"Race",tt:"Time trial",est:"Estimate",workout:"Workout"})[k]||"Race";
+const isEst = r => r?.kind==="est"; // coach's guess: sets paces, but no PRs, trend, rating change or meets
+const COND=["Hot","Humid","Cold","Rain","Mud","Wind","Hilly"];
+const condOf = r => Array.isArray(r?.cond) ? r.cond.filter(c=>typeof c==="string"&&c) : [];
+
 function toast(msg){toastShow(msg)}
 // Toast with a button (e.g. Undo). Stays ~6 s, and holds while the button has keyboard focus.
 function toastAction(msg,label,fn,focus){toastShow(msg,label,fn); if(focus) $("#toast button")?.focus({preventScroll:true})}
@@ -424,15 +461,16 @@ async function del(coll,id){
 function resultsFor(aid){return Object.values(S.results).filter(r=>r.athleteId===aid).sort((a,b)=>(b.date||"").localeCompare(a.date||"")||(b.created||0)-(a.created||0))}
 function effSec(r){return (+r.seconds||0)+(+r.adj||0)}
 function resultCalc(r,gender){const km=distKm(r);if(!km||!r.seconds) return null;return Tin.base(km,effSec(r),gender)}
-function basisOf(a){
+function basisOf(a){ // pinned basis, else the latest race or time trial, else the latest estimate
   const rs=resultsFor(a.id);
   const pinned = a.basisId && rs.find(r=>r.id===a.basisId);
-  return pinned || rs[0] || null;
+  return pinned || rs.find(r=>!isEst(r)) || rs[0] || null;
 }
 function athleteCalc(a){const b=basisOf(a);if(!b) return null;const c=resultCalc(b,a.gender);return c?{...c,basis:b}:null}
+const estPace = c => isEst(c?.basis); // paces come from a coach estimate
 function prIds(rs){
   const best={};
-  rs.forEach(r=>{const k=r.distKey==="custom"?"c"+r.meters:r.distKey;if(!best[k]||+r.seconds<+best[k].seconds) best[k]=r});
+  rs.filter(r=>!isEst(r)).forEach(r=>{const k=r.distKey==="custom"?"c"+r.meters:r.distKey;if(!best[k]||+r.seconds<+best[k].seconds) best[k]=r});
   return new Set(Object.values(best).map(r=>r.id));
 }
 function groups(){return [...new Set(Object.values(S.athletes).map(a=>a.group).filter(Boolean))].sort()}
@@ -440,13 +478,24 @@ function groups(){return [...new Set(Object.values(S.athletes).map(a=>a.group).f
 /* ============ UI state ============ */
 // Team pace sheet: default columns match the coach's own sheet (Mile Threshold, 800m VO2 Max, fast end of each range)
 const PS_DEF = {title:"", cols:[{z:4,m:1609.344},{z:7,m:800}], end:"fast", grp:"All", gender:"all", sort:"fast", per:30};
+// A pace sheet column is a training zone {z,m} or a race plan {k:"race",dk,show} for one of these races
+const PS_RACE = {"2mi":"2 Mile","4k":"4K","2.5mi":"2.5 Mile","3mi":"3 Mile","5k":"5K","6k":"6K","8k":"8K"};
+const PS_SHOW = [["finish","Finish"],["pace","Pace /mi"],["splits","Mile splits"]];
+const psColOK = c => isObj(c) && (c.k==="race" ? Object.keys(PS_RACE).includes(c.dk)&&PS_SHOW.some(x=>x[0]===c.show) : !!ZONES[c.z]&&REPS.some(r=>Math.abs(r[0]-c.m)<.5));
+const WO_SECS = [60,90,120,180,240,300,360,480,600,720,900,1200]; // timed reps on the Workout tab
 const U = {view:"roster", athlete:null, q:"", grp:"All", gender:"all", sort:"rating", atab:"paces", rep:400, swNew:false, sfHelp:false,
-  wo:{zone:5, rep:1000, grp:"All", gender:"all"},
+  wo:{zone:5, rep:1000, grp:"All", gender:"all", mode:"dist", sec:180, loop:""},
+  rlast:null, // last logged result: distance, type, meet, date (prefills the next one)
   calc:{dist:"5k", meters:"", time:"", gender:"m"}};
 try{const s=JSON.parse(localStorage.getItem("xc-ledger-ui")||"{}");if(s.wo)Object.assign(U.wo,s.wo);if(s.rep)U.rep=s.rep;if(s.sort)U.sort=s.sort;
-  if(s.ps&&Array.isArray(s.ps.cols)){const cols=s.ps.cols.filter(c=>ZONES[c?.z]&&REPS.some(r=>Math.abs(r[0]-c.m)<.5)).slice(0,4);U.ps={...JSON.parse(JSON.stringify(PS_DEF)),...s.ps,cols:cols.length?cols:JSON.parse(JSON.stringify(PS_DEF.cols))}}}catch{}
+  if(s.ps&&Array.isArray(s.ps.cols)){const cols=s.ps.cols.filter(psColOK).map(c=>c.k==="race"?{k:"race",dk:c.dk,show:c.show}:c).slice(0,4);U.ps={...JSON.parse(JSON.stringify(PS_DEF)),...s.ps,cols:cols.length?cols:JSON.parse(JSON.stringify(PS_DEF.cols))}}
+  const L=s.rlast; if(isObj(L)&&DMAP[L.dist]) U.rlast={dist:L.dist, meters:L.dist==="custom"&&+L.meters>0?+L.meters:"", kind:KINDS.some(k=>k[0]===L.kind)?L.kind:"race",
+    meet:typeof L.meet==="string"?L.meet:"", date:/^\d{4}-\d\d-\d\d$/.test(L.date)?L.date:"", at:+L.at||0};}catch{}
 if(!U.ps) U.ps=JSON.parse(JSON.stringify(PS_DEF));
-function saveUI(){try{localStorage.setItem("xc-ledger-ui",JSON.stringify({wo:U.wo,rep:U.rep,sort:U.sort,ps:U.ps}))}catch{}}
+if(U.wo.mode!=="time") U.wo.mode="dist";
+U.wo.sec = WO_SECS.includes(+U.wo.sec) ? +U.wo.sec : 180;
+U.wo.loop = String(U.wo.loop??"").replace(/\D/g,"").slice(0,5);
+function saveUI(){try{localStorage.setItem("xc-ledger-ui",JSON.stringify({wo:U.wo,rep:U.rep,sort:U.sort,ps:U.ps,rlast:U.rlast}))}catch{}}
 
 const I = {
   roster:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c.6-3.4 3-5.4 6-5.4s5.4 2 6 5.4"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14.2c2.4.2 4 1.9 4.5 4.8"/></svg>',
@@ -507,13 +556,13 @@ function viewRoster(){
     <div class="sectionhead"><span class="label">${withCalc.length} runner${withCalc.length===1?"":"s"}</span>
       <div class="seg" style="width:170px"><button data-act="sort" data-v="rating" aria-pressed="${U.sort==="rating"}">Rating</button><button data-act="sort" data-v="name" aria-pressed="${U.sort==="name"}">Name</button></div></div>
     <div class="list">${withCalc.map(({a,c})=>{
-      const rs=resultsFor(a.id); const prev=rs[1]?resultCalc(rs[1],a.gender):null, cur=rs[0]?resultCalc(rs[0],a.gender):null;
+      const rs=resultsFor(a.id), rr=rs.filter(r=>!isEst(r)); const prev=rr[1]?resultCalc(rr[1],a.gender):null, cur=rr[0]?resultCalc(rr[0],a.gender):null;
       const trend = prev&&cur ? cur.rating-prev.rating : 0;
       return `<button class="row" data-act="open" data-id="${a.id}">
         <div class="bib">${esc(initials(a.name))}</div>
         <div style="min-width:0"><div class="name">${esc(a.name)} ${a.sample?'<span class="pill sample">Sample</span>':""}</div>
         <div class="meta">${[a.grade?`Gr ${esc(a.grade)}`:"",esc(a.group||""),`${rs.length} entr${rs.length===1?"y":"ies"}`].filter(Boolean).join(" · ")}</div></div>
-        <div class="right">${c?`<div class="big">${fmtEq(Tin.equiv(5,c.t3k))}</div><div class="small">5K eq · ${(c.rating*100).toFixed(1)}%${trend?` <span class="${trend>0?"up":"down"}">${trend>0?"▲":"▼"}</span>`:""}</div>`:`<div class="small">No results yet</div>`}</div>
+        <div class="right">${c?`<div class="big">${fmtEq(Tin.equiv(5,c.t3k))}</div><div class="small">5K eq · ${(c.rating*100).toFixed(1)}%${estPace(c)?" · est.":""}${trend?` <span class="${trend>0?"up":"down"}">${trend>0?"▲":"▼"}</span>`:""}</div>`:`<div class="small">No results yet</div>`}</div>
       </button>`}).join("")||`<div class="empty"><p>No runners match these filters.</p></div>`}</div>
   </div>`;
 }
@@ -548,7 +597,7 @@ function banners(){
 }
 
 function sparkSVG(a){
-  const rs=resultsFor(a.id).filter(r=>r.kind!=="workout").slice().reverse();
+  const rs=resultsFor(a.id).filter(r=>r.kind!=="workout"&&!isEst(r)).slice().reverse();
   const pts=rs.map(r=>{const c=resultCalc(r,a.gender);return c?{d:r.date,v:Tin.equiv(5,c.t3k)}:null}).filter(Boolean);
   if(pts.length<2) return `<div class="small" style="color:color-mix(in srgb,var(--bg) 65%,transparent)">Log two or more races to see the season trend.</div>`;
   const W=320,H=64,P=6, vs=pts.map(p=>p.v), lo=Math.min(...vs), hi=Math.max(...vs), span=Math.max(hi-lo,5);
@@ -573,7 +622,7 @@ function viewAthlete(a){
       <div class="stat"><div class="label">5K equiv</div><div class="v">${c?fmtEq(Tin.equiv(5,c.t3k)):"–"}</div></div>
       <div class="stat"><div class="label">Easy ≈ /mi</div><div class="v">${c?fmt(Tin.zone(c.v,ZONES[1],1609.344).reduce((x,y)=>x+y)/2):"–"}</div></div>
     </div>
-    <div class="basis">${c?`Paces from <b>${esc(distLabel(c.basis))} · ${fmtRace(+c.basis.seconds)}</b>${+c.basis.adj?` (${+c.basis.adj>0?"+":""}${c.basis.adj}s course adj.)`:""} · ${esc(c.basis.meet||c.basis.kind)} · ${fmtDate(c.basis.date)}`:"Log a race or time trial to set training paces."}</div>
+    <div class="basis">${c?`${estPace(c)?"<b>Estimated</b> paces from":"Paces from"} <b>${esc(distLabel(c.basis))} · ${fmtRace(+c.basis.seconds)}</b>${+c.basis.adj?` (${+c.basis.adj>0?"+":""}${c.basis.adj}s course adj.)`:""}${c.basis.meet||!estPace(c)?` · ${esc(c.basis.meet||kindLabel(c.basis.kind))}`:""} · ${fmtDate(c.basis.date)}`:"Log a race or time trial to set training paces."}</div>
     ${sparkSVG(a)}</section>`;
   let body="";
   if(U.atab==="paces"){
@@ -586,22 +635,23 @@ function viewAthlete(a){
       : `<div class="card empty"><p>No results yet. Add a race or time trial and this runner's paces appear here.</p><button class="btn" data-act="addResult">${I.plus}Add result</button></div>`;
   } else if(U.atab==="ledger"){
     body = rs.length ? `<div class="list">${rs.map((r,i)=>{
-      const rc=resultCalc(r,a.gender), prev=rs.slice(i+1).find(x=>x.kind!=="workout"), pc=prev&&resultCalc(prev,a.gender);
-      const dl= rc&&pc ? (rc.rating-pc.rating)*100 : null; const p=dparts(r.date);
+      const rc=resultCalc(r,a.gender), prev=!isEst(r)&&rs.slice(i+1).find(x=>x.kind!=="workout"&&!isEst(x)), pc=prev&&resultCalc(prev,a.gender);
+      const dl= rc&&pc ? (rc.rating-pc.rating)*100 : null; const p=dparts(r.date), cond=condOf(r);
       return `<button class="entry" data-act="editResult" data-id="${r.id}">
         <div class="date"><div class="mo">${p.mo}</div><div class="dy">${p.dy}</div></div>
-        <div style="min-width:0"><div class="name" style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.meet||(r.kind==="tt"?"Time trial":"Race"))}</div>
-          <div class="small">${esc(distLabel(r))} · ${r.kind==="tt"?"Time trial":r.kind==="workout"?"Workout":"Race"}${prs.has(r.id)?' <span class="pill pr">PR</span>':""}${c&&c.basis.id===r.id?' <span class="pill basis">Pace basis</span>':""}</div>
+        <div style="min-width:0"><div class="name" style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.meet||(isEst(r)?"Coach estimate":kindLabel(r.kind)))}</div>
+          <div class="small">${esc(distLabel(r))} · ${isEst(r)?'<span class="pill est">Estimate</span>':kindLabel(r.kind)}${prs.has(r.id)?' <span class="pill pr">PR</span>':""}${c&&c.basis.id===r.id?' <span class="pill basis">Pace basis</span>':""}</div>
+          ${cond.length?`<div class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cond.join(" · "))}</div>`:""}
           ${r.notes?`<div class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.notes)}</div>`:""}</div>
         <div class="right"><div class="big">${fmtRace(+r.seconds)}</div><div class="small">${rc?(rc.rating*100).toFixed(1)+"%":""}${dl!=null&&Math.abs(dl)>=.05?` <span class="${dl>0?"up":"down"}">${dl>0?"+":""}${dl.toFixed(1)}</span>`:""}</div></div>
       </button>`}).join("")}</div>
-      <p class="small" style="margin:0">Tap an entry to edit it or make it the pace basis. Rating change compares to the previous entry.</p>`
+      <p class="small" style="margin:0">Tap an entry to edit it or make it the pace basis. Rating change compares to the previous race or time trial. Estimates don't count for PRs or the trend.</p>`
       : `<div class="card empty"><p>The ledger is empty. Every race and time trial you log shows up here with its rating and PR status.</p></div>`;
     body+=`<button class="btn block" data-act="addResult">${I.plus}Add result</button>`;
   } else {
     body = c ? `<div class="list"><div class="grid2">${EQUIV.map(([l,km])=>{const t=Tin.equiv(km,c.t3k);
       return `<div class="${Math.abs(km-distKm(c.basis))<.001?"hl":""}"><div class="d">${l}</div><div class="t">${fmtT(t)}</div><div class="p">${fmtT(t/km*1.609344)} /mi</div></div>`}).join("")}</div></div>
-      <p class="small" style="margin:0">Predicted times across distances from the current pace basis, on a flat course.</p>`
+      <p class="small" style="margin:0">Predicted times across distances from the current pace basis${estPace(c)?" (a coach estimate)":""}, on a flat course.</p>`
       : `<div class="card empty"><p>Add a result to see equivalent times.</p></div>`;
   }
   return head+`<div class="wrap stack">${banners()}${hero}
@@ -611,10 +661,7 @@ function viewAthlete(a){
 
 function viewWorkout(){
   if(U.wo.grp!=="All"&&!groups().includes(U.wo.grp)) U.wo.grp="All";
-  const w=U.wo, z=ZONES[w.zone];
-  const all=Object.values(S.athletes).filter(a=>(w.grp==="All"||a.group===w.grp)&&(w.gender==="all"||a.gender===w.gender));
-  const rows=all.map(a=>({a,c:athleteCalc(a)})).sort((x,y)=>(y.c?.rating||0)-(x.c?.rating||0)||x.a.name.localeCompare(y.a.name));
-  const ok=!z.maxM||w.rep<=z.maxM+.5;
+  const w=U.wo, tm=w.mode==="time";
   const gs=groups();
   return `<header class="top"><div style="flex:1;min-width:0"><div class="sub">Today's session</div><h1>Workout Splits</h1></div>
     <button class="iconbtn" data-act="copyWorkout" aria-label="Copy split sheet">${I.copy}</button></header>
@@ -624,21 +671,51 @@ function viewWorkout(){
       <span aria-hidden="true" style="color:var(--muted);font-size:22px">›</span></button>
     <div class="label">Intensity</div>
     <div class="chips">${ZONES.map((zz,i)=>`<button class="chip" data-act="wzone" data-v="${i}" aria-pressed="${w.zone===i}" style="${w.zone===i?"":`border-color:color-mix(in srgb,var(${zz.c}) 45%,var(--line))`}">${zz.n}</button>`).join("")}</div>
-    <div class="label">Rep distance</div>
-    <div class="chips">${REPS.map(([m,l])=>`<button class="chip" data-act="wrep" data-v="${m}" aria-pressed="${Math.abs(w.rep-m)<.5}">${l}</button>`).join("")}</div>
+    <div class="sectionhead"><span class="label">${tm?"Rep time":"Rep distance"}</span>
+      <div class="seg" style="width:170px"><button data-act="wmode" data-v="dist" aria-pressed="${!tm}">Distance</button><button data-act="wmode" data-v="time" aria-pressed="${tm}">Time</button></div></div>
+    <div class="chips">${tm?WO_SECS.map(s=>`<button class="chip" data-act="wsec" data-v="${s}" aria-pressed="${w.sec===s}">${fmt(s)}</button>`).join("")
+      :REPS.map(([m,l])=>`<button class="chip" data-act="wrep" data-v="${m}" aria-pressed="${Math.abs(w.rep-m)<.5}">${l}</button>`).join("")}</div>
+    ${tm?`<div class="woloop"><label class="label" for="woLoop">Loop (m)</label><input id="woLoop" type="text" inputmode="numeric" pattern="[0-9]*" value="${esc(w.loop)}" placeholder="None" autocomplete="off"><span class="small">Optional. Add a track or loop length, like 400, to see laps.</span></div>`:""}
     <div class="chips">${["All",...gs].map(g=>`<button class="chip" data-act="wgrp" data-v="${esc(g)}" aria-pressed="${w.grp===g}">${esc(g)}</button>`).join("")}
       <span style="width:1px;background:var(--line);flex:none"></span>
       ${[["all","Everyone"],["f","Girls"],["m","Boys"]].map(([k,l])=>`<button class="chip" data-act="wgender" data-v="${k}" aria-pressed="${w.gender===k}">${l}</button>`).join("")}</div>
-    <div class="card" style="padding:12px 14px;display:flex;gap:12px;align-items:center">
-      <span style="width:6px;align-self:stretch;border-radius:3px;background:var(${z.c})"></span>
-      <div style="flex:1"><div style="font:700 22px/1.1 var(--f-display);text-transform:uppercase">${repLabel(w.rep)} @ ${z.n}</div><div class="small">${z.d}. Slow–fast range per rep${z.maxM?`, for reps up to ${z.maxM}m`:""}.</div></div>
-    </div>
-    ${!ok?`<div class="notice">${z.n} is meant for reps of ${z.maxM}m or less. Pick a shorter rep.</div>`:""}
-    <div class="list">${rows.length?rows.map(({a,c})=>{const p=c&&ok?Tin.zone(c.v,z,w.rep):null;
-      return `<div class="wo-row"><div style="min-width:0"><div class="name" style="font-weight:600">${esc(a.name)}</div><div class="small">${c?`${(c.rating*100).toFixed(1)}% · ${esc(a.group||"")}`:"No results yet"}</div></div>
-      <div class="t">${p?`${fmtRange(p)}`:"–"}</div></div>`}).join(""):`<div class="empty"><p>No runners here yet. Add runners on the Roster tab.</p></div>`}</div>
-    ${rows.length?`<button class="btn ghost block" data-act="copyWorkout">${I.copy}Copy split sheet</button>`:""}
+    <div id="woOut" class="stack">${woOut()}</div>
   </div>`;
+}
+// Workout runners, fastest first
+function woRows(){const w=U.wo;
+  return Object.values(S.athletes).filter(a=>(w.grp==="All"||a.group===w.grp)&&(w.gender==="all"||a.gender===w.gender))
+    .map(a=>({a,c:athleteCalc(a)})).sort((x,y)=>(y.c?.rating||0)-(x.c?.rating||0)||x.a.name.localeCompare(y.a.name));}
+const woLoop = ()=>+U.wo.loop>=100?+U.wo.loop:0; // shorter "loops" are ignored (also while typing 400)
+// Timed rep: [slow, fast] whole meters covered in `sec` at zone z, or null if the fast end is past the zone's longest rep.
+function woDist(c,z,sec){const d=[z.lo,z.hi].map(f=>Math.round(sec*1000*Math.pow(f,.7931)/c.v)); return z.maxM&&d[1]>z.maxM+.5?null:d}
+function lapsText(dS,dF,L){ // "2 laps + 12–46 m"; across a lap line: "1 lap + 390 m – 2 laps + 30 m"
+  const nS=Math.floor(dS/L), nF=Math.floor(dF/L), rS=dS-nS*L, rF=dF-nF*L, lp=n=>`${n} lap${n===1?"":"s"}`;
+  const one=(n,r)=>n?`${lp(n)}${r?` + ${r} m`:""}`:`${r} m`;
+  if(!nF) return "";
+  if(nS===nF) return rS===rF ? one(nS,rS) : `${lp(nS)} + ${rS}–${rF} m`;
+  return `${one(nS,rS)} – ${one(nF,rF)}`;
+}
+// One runner's target for the current workout: [main, laps line]
+function woCell(c){
+  const w=U.wo, z=ZONES[w.zone]; if(!c) return null;
+  if(w.mode==="time"){const d=woDist(c,z,w.sec), L=woLoop(); return d?[`${d[0]}–${d[1]} m`,L?lapsText(d[0],d[1],L):""]:["–",""]}
+  const p=Tin.zone(c.v,z,w.rep); return [p?fmtRange(p):"–",""];
+}
+// Everything below the workout controls (redrawn alone while the loop length is typed). A laps line breaks only after its dash.
+function woOut(){
+  const w=U.wo, z=ZONES[w.zone], tm=w.mode==="time", L=woLoop(), rows=woRows();
+  const ok=!z.maxM||w.rep<=z.maxM+.5, over=tm&&z.maxM&&rows.some(r=>r.c&&!woDist(r.c,z,w.sec));
+  return `<div class="card" style="padding:12px 14px;display:flex;gap:12px;align-items:center">
+      <span style="width:6px;align-self:stretch;border-radius:3px;background:var(${z.c})"></span>
+      <div style="flex:1"><div style="font:700 22px/1.1 var(--f-display);text-transform:uppercase">${tm?fmt(w.sec):repLabel(w.rep)} @ ${z.n}</div><div class="small">${z.d}. ${tm?`Slow–fast distance covered in ${fmt(w.sec)}${L?` on a ${L}m loop`:""}`:"Slow–fast range per rep"}${z.maxM?`, for reps up to ${z.maxM}m`:""}.</div></div>
+    </div>
+    ${!tm&&!ok?`<div class="notice">${z.n} is meant for reps of ${z.maxM}m or less. Pick a shorter rep.</div>`:""}
+    ${over?`<div class="notice">${z.n} is meant for reps of ${z.maxM}m or less, so runners who would cover more show a dash. Pick a shorter time.</div>`:""}
+    <div class="list">${rows.length?rows.map(({a,c})=>{const t=woCell(c);
+      return `<div class="wo-row"><div style="min-width:0"><div class="name" style="font-weight:600">${esc(a.name)}</div><div class="small">${c?[`${(c.rating*100).toFixed(1)}%`,estPace(c)?"Estimated":"",esc(a.group||"")].filter(Boolean).join(" · "):"No results yet"}</div></div>
+      <div class="t">${t?t[0]:"–"}${t&&t[1]?`<small>${t[1].split(" – ").map(x=>x.replace(/ /g,"&nbsp;")).join("&nbsp;– ")}</small>`:""}</div></div>`}).join(""):`<div class="empty"><p>No runners here yet. Add runners on the Roster tab.</p></div>`}</div>
+    ${rows.length?`<button class="btn ghost block" data-act="copyWorkout">${I.copy}Copy split sheet</button>`:""}`;
 }
 
 function viewCalc(){
@@ -648,7 +725,7 @@ function viewCalc(){
     <div class="card stack">
       <div class="fields">
         <div class="field"><label class="label" for="cDist">Race distance</label>${distSelect("cDist",k.dist)}</div>
-        <div class="field"><label class="label" for="cTime">Race time</label><input id="cTime" inputmode="decimal" placeholder="17:45" value="${esc(k.time)}" autocomplete="off"></div>
+        <div class="field"><label class="label" for="cTime">Race time</label><input id="cTime" class="tin" inputmode="decimal" placeholder="17:45" value="${esc(k.time)}" autocomplete="off"></div>
         <div class="field full" ${k.dist==="custom"?"":"hidden"} id="cMetersWrap"><label class="label" for="cMeters">Distance in meters</label><input id="cMeters" inputmode="numeric" value="${esc(k.meters)}" placeholder="4500"></div>
       </div>
       <div class="field"><span class="label">Gender (for rating)</span><div class="seg"><button data-act="cgender" data-v="m" aria-pressed="${k.gender==="m"}">Boys</button><button data-act="cgender" data-v="f" aria-pressed="${k.gender==="f"}">Girls</button></div></div>
@@ -659,7 +736,7 @@ function viewCalc(){
 function renderCalcOut(){
   const k=U.calc, out=$("#calcOut"); if(!out) return;
   const km = k.dist==="custom" ? (+k.meters||0)/1000 : DMAP[k.dist].km, sec=parseTime(k.time);
-  if(!km||!isFinite(sec)||sec<=0){out.innerHTML=`<div class="card empty"><p>Enter a race time like <span class="num">17:45</span> or <span class="num">1745</span> to see the rating, training paces and equivalent times.</p></div>`;return}
+  if(!km||!isFinite(sec)||sec<=0){out.innerHTML=`<div class="card empty"><p>Type a race time like <span class="num">1745</span> for <span class="num">17:45</span> to see the rating, training paces and equivalent times.</p></div>`;return}
   const c=Tin.base(km,sec,k.gender), per=sec/km;
   const cols=[["Mile",1609.344],["1600",1600],["1000",1000],["800",800],["600",600],["500",500],["400",400],["300",300],["200",200],["100",100]];
   out.innerHTML=`
@@ -694,6 +771,11 @@ function openSheet(s){
 function rerenderSheet(){const sh=document.querySelector("#sheetRoot .sheet");if(!sh||!SH) return;const st=sh.scrollTop;sh.innerHTML='<div class="grab"></div>'+sheetHTML(SH);sh.scrollTop=st}
 function closeSheet(){psGen++;psClear();const root=$("#sheetRoot");const sh=root.querySelector(".sheet");if(!sh){SH=null;return}
   sh.classList.remove("on");root.querySelector(".scrim").classList.remove("on");setTimeout(()=>{root.innerHTML="";SH=null},220)}
+// New result: last used distance and type; also the meet and date if the last result was logged within 2 days (same meet, next runner).
+function resultDraft(s){
+  const L=U.rlast||{}, recent=!!L.at&&Date.now()-L.at<2*864e5;
+  return {kind:L.kind||"race", distKey:s.dist||L.dist||"5k", meters:s.dist?s.meters:L.dist==="custom"?L.meters:"", meet:recent?L.meet:"", date:recent&&L.date||today()};
+}
 function sheetHTML(s){
   if(s.type==="athlete"){const a=s.a||{};const gs=groups();
     return `<h2>${s.a?"Edit runner":"New runner"}</h2><form id="fAthlete" class="stack">
@@ -708,19 +790,21 @@ function sheetHTML(s){
       <div class="actions"><button type="button" class="btn ghost" data-act="closeSheet">Cancel</button><button class="btn" type="submit">${s.a?"Save":"Add runner"}</button></div>
       ${s.a?`<button type="button" class="btn danger block" data-act="askDelAthlete">Delete runner</button><div id="delBox"></div>`:""}
     </form>`;}
-  if(s.type==="result"){const r=s.r||{}; const as=Object.values(S.athletes).sort((x,y)=>x.name.localeCompare(y.name));
+  if(s.type==="result"){const r=s.r||resultDraft(s), cond=condOf(r); const as=Object.values(S.athletes).sort((x,y)=>x.name.localeCompare(y.name));
     return `<h2>${s.r?"Edit result":"Log result"}</h2><form id="fResult" class="stack">
       ${s.pickAthlete?`<div class="field"><label class="label" for="rAthlete">Runner</label><select id="rAthlete" required>${as.length?as.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join(""):`<option value="">Add a runner first</option>`}</select></div>`:""}
-      <div class="field"><span class="label">Type</span><div class="seg" id="rKindSeg">${[["race","Race"],["tt","Time trial"]].map(([k,l])=>`<button type="button" data-act="rkind" data-v="${k}" aria-pressed="${(r.kind||"race")===k}">${l}</button>`).join("")}</div></div>
+      <div class="field"><span class="label">Type</span><div class="seg" id="rKindSeg">${KINDS.map(([k,l])=>`<button type="button" data-act="rkind" data-v="${k}" aria-pressed="${(r.kind||"race")===k}">${l}</button>`).join("")}</div>
+        <span class="hint" id="rEstHint" ${isEst(r)?"":"hidden"}>Your best guess for a runner with no race yet. It sets training paces, but doesn't count for PRs, the season trend or meets.</span></div>
       <input type="hidden" id="rKind" value="${r.kind||"race"}">
       <div class="field"><label class="label" for="rMeet">Meet or course</label><input id="rMeet" value="${esc(r.meet)}" placeholder="Conference championships" autocomplete="off"></div>
       <div class="fields">
         <div class="field"><label class="label" for="rDate">Date</label><input id="rDate" type="date" value="${esc(r.date||today())}" required></div>
         <div class="field"><label class="label" for="rDist">Distance</label>${distSelect("rDist",r.distKey||s.dist||"5k")}</div>
         <div class="field full" id="rMetersWrap" ${(r.distKey||s.dist)==="custom"?"":"hidden"}><label class="label" for="rMeters">Distance in meters</label><input id="rMeters" inputmode="numeric" value="${esc(r.meters||s.meters||"")}" placeholder="4500"></div>
-        <div class="field"><label class="label" for="rTime">Time</label><input id="rTime" inputmode="decimal" required value="${esc(r.seconds?fmtRace(+r.seconds):(s.time||""))}" placeholder="17:45" autocomplete="off"></div>
+        <div class="field"><label class="label" for="rTime">Time</label><input id="rTime" class="tin" inputmode="decimal" required value="${esc(r.seconds?fmtRace(+r.seconds):maskTime(s.time||""))}" placeholder="17:45" autocomplete="off" aria-describedby="rErr"></div>
         <div class="field"><label class="label" for="rAdj">Course adj. (sec)</label><input id="rAdj" inputmode="decimal" value="${esc(r.adj||"")}" placeholder="-20"></div>
         <div class="field full"><span class="hint">Course adjustment corrects for hills, mud or heat. Enter −20 if this course runs about 20 seconds slow; paces use the adjusted time.</span></div>
+        <div class="field full"><span class="label" id="rCondL">Conditions</span><div class="chips multi" id="rCond" role="group" aria-labelledby="rCondL">${COND.map(x=>`<button type="button" class="chip" data-act="rcond" data-v="${x}" aria-pressed="${cond.includes(x)}">${x}</button>`).join("")}</div></div>
         <div class="field full"><label class="label" for="rNotes">Notes</label><input id="rNotes" value="${esc(r.notes)}" placeholder="Went out too fast, muddy second mile" autocomplete="off"></div>
       </div>
       <label style="display:flex;gap:10px;align-items:center;font-weight:600"><input type="checkbox" id="rBasis" ${s.isBasis||!s.r?"checked":""} style="width:20px;height:20px;accent-color:var(--pine)"> Use for this runner's training paces</label>
@@ -752,15 +836,17 @@ function sheetHTML(s){
     <p class="small" style="margin:-6px 0 14px">Makes an image of every runner's paces, fastest first, ready to text the team.</p>
     <div class="stack">
       <div class="label">Columns</div>
-      ${cfg.cols.map((c,i)=>{const z=ZONES[c.z], bad=z.maxM&&c.m>z.maxM+.5; return `<div class="pscol">
-        <select id="psZ${i}" aria-label="Column ${i+1} intensity">${ZONES.map((zz,k)=>`<option value="${k}" ${k===c.z?"selected":""}>${zz.n}</option>`).join("")}</select>
-        <select id="psD${i}" aria-label="Column ${i+1} rep distance">${REPS.map(([m])=>`<option value="${m}" ${Math.abs(m-c.m)<.5?"selected":""}>${expDist(m)}</option>`).join("")}</select>
+      ${cfg.cols.map((c,i)=>{const race=c.k==="race", z=race?null:ZONES[c.z], bad=!race&&z.maxM&&c.m>z.maxM+.5; return `<div class="pscol">
+        <select id="psZ${i}" aria-label="Column ${i+1} intensity or race plan"><optgroup label="Training zone">${ZONES.map((zz,k)=>`<option value="${k}" ${!race&&k===c.z?"selected":""}>${zz.n}</option>`).join("")}</optgroup>
+          <optgroup label="Race plan">${PS_SHOW.map(([k,l])=>`<option value="${k}" ${race&&c.show===k?"selected":""}>${l}</option>`).join("")}</optgroup></select>
+        <select id="psD${i}" aria-label="Column ${i+1} ${race?"race distance":"rep distance"}">${race?Object.entries(PS_RACE).map(([k,l])=>`<option value="${k}" ${k===c.dk?"selected":""}>${l}</option>`).join("")
+          :REPS.map(([m])=>`<option value="${m}" ${Math.abs(m-c.m)<.5?"selected":""}>${expDist(m)}</option>`).join("")}</select>
         <button type="button" class="iconbtn" data-act="psDel" data-i="${i}" aria-label="Remove column ${i+1}" ${cfg.cols.length<2?"disabled":""}>✕</button>
         ${bad?`<div class="small" style="grid-column:1/-1;color:var(--bad)">${z.n} only covers reps of ${z.maxM}m or less, so this column will show a dash. Pick a shorter distance.</div>`:""}
       </div>`}).join("")}
       ${cfg.cols.length<4?`<button type="button" class="btn ghost" data-act="psAdd">${I.plus}Add column</button>`:""}
       <div class="field"><span class="label">Time shown</span>${seg("psEnd",cfg.end,[["fast","Target"],["mid","Middle"],["slow","Slow end"],["range","Range"]])}
-        <span class="hint">${{fast:"Target is the fast end of each Tinman range.",mid:"Middle is halfway between the slow and fast ends of each Tinman range.",slow:"Slow end is the easiest time in each Tinman range.",range:"Range shows the slow and fast ends, like the Workout tab."}[cfg.end]}</span></div>
+        <span class="hint">${{fast:"Target is the fast end of each Tinman range.",mid:"Middle is halfway between the slow and fast ends of each Tinman range.",slow:"Slow end is the easiest time in each Tinman range.",range:"Range shows the slow and fast ends, like the Workout tab."}[cfg.end]}${cfg.cols.some(c=>c.k==="race")?" Race plan columns always show the even-pace plan from the runner's equivalent time.":""}</span></div>
       <div class="field"><span class="label">Runners</span>
         <div class="chips">${["All",...gs].map(g=>`<button type="button" class="chip" data-act="psGrp" data-v="${esc(g)}" aria-pressed="${cfg.grp===g}">${esc(g==="All"?"All groups":g)}</button>`).join("")}</div>
         ${seg("psGender",cfg.gender,[["all","Everyone"],["f","Girls"],["m","Boys"]])}</div>
@@ -830,6 +916,8 @@ document.addEventListener("click",e=>{
     case "rep": U.rep=+v; saveUI(); render(); break;
     case "wzone": U.wo.zone=+v; if(ZONES[+v].maxM&&U.wo.rep>ZONES[+v].maxM) U.wo.rep=ZONES[+v].maxM>=400?400:ZONES[+v].maxM; saveUI(); render(); break;
     case "wrep": U.wo.rep=+v; saveUI(); render(); break;
+    case "wmode": U.wo.mode=v==="time"?"time":"dist"; saveUI(); render(); break;
+    case "wsec": U.wo.sec=+v; saveUI(); render(); break;
     case "wgrp": U.wo.grp=v; saveUI(); render(); break;
     case "wgender": U.wo.gender=v; saveUI(); render(); break;
     case "cgender": U.calc.gender=v; render(); break;
@@ -841,7 +929,8 @@ document.addEventListener("click",e=>{
       openSheet({type:"result",pickAthlete:true,dist:k.dist,meters:k.meters,time:k.time}); break;}
     case "closeSheet": closeSheet(); break;
     case "agender": $("#aGender").value=v; t.parentElement.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",b===t)); break;
-    case "rkind": $("#rKind").value=v; t.parentElement.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",b===t)); break;
+    case "rkind": $("#rKind").value=v; t.parentElement.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",b===t)); $("#rEstHint").hidden=v!=="est"; break;
+    case "rcond": t.setAttribute("aria-pressed",t.getAttribute("aria-pressed")!=="true"); break;
     case "askDelAthlete": $("#delBox").innerHTML=`<div class="confirm">Delete ${esc(SH.a.name)} and all ${resultsFor(SH.a.id).length} ledger entries? You can restore them from Trash in Team & backup for ${TRASH_DAYS} days.<div class="actions" style="margin:0"><button type="button" class="btn ghost" data-act="closeSheet">Keep</button><button type="button" class="btn" style="background:var(--bad)" data-act="delAthlete">Delete</button></div></div>`; break;
     case "delAthlete": {const id=SH.a.id, tid=trashAthlete(id); U.athlete=null; closeSheet(); render();
       toastAction("Runner deleted","Undo",()=>{const why=restoreTrash(tid); if(why) return toast(why); U.athlete=id; render(); scrollTo(0,0); toast("Runner restored")},e.detail===0); break;}
@@ -891,6 +980,9 @@ document.addEventListener("click",e=>{
 });
 document.addEventListener("input",e=>{
   const id=e.target.id;
+  if(e.target.classList?.contains("tin")){maskTin(e.target);e.target.removeAttribute("aria-invalid")}
+  if(id==="woLoop"){const v=e.target.value.replace(/\D/g,"").slice(0,5); if(v!==e.target.value) e.target.value=v;
+    U.wo.loop=v; saveUI(); const o=$("#woOut"); if(o) o.innerHTML=woOut()}
   if(id==="q"){U.q=e.target.value;render()}
   if(id==="psTitle"){U.ps.title=e.target.value;psGen++;saveUI();psResetMakeBtn();if(SH?.imgs){psClear();const o=$("#psOut");if(o)o.innerHTML=""}}
   if(id==="cTime"){U.calc.time=e.target.value;renderCalcOut()}
@@ -901,7 +993,10 @@ document.addEventListener("change",e=>{
   if(id==="cDist"){U.calc.dist=e.target.value;$("#cMetersWrap").hidden=e.target.value!=="custom";renderCalcOut()}
   if(id==="rDist"){$("#rMetersWrap").hidden=e.target.value!=="custom"}
   const pm=/^ps([ZD])(\d)$/.exec(id||"");
-  if(pm&&U.ps.cols[+pm[2]]){const col=U.ps.cols[+pm[2]]; if(pm[1]==="Z") col.z=+e.target.value; else col.m=+e.target.value; psChanged();}
+  if(pm&&U.ps.cols[+pm[2]]){const i=+pm[2], col=U.ps.cols[i], v=e.target.value, race=PS_SHOW.some(x=>x[0]===v);
+    if(pm[1]==="Z") U.ps.cols[i] = race ? {k:"race",dk:col.k==="race"?col.dk:"5k",show:v} : {z:+v,m:col.k==="race"?1609.344:col.m}; // race plan or training zone
+    else if(col.k==="race") col.dk=v; else col.m=+v;
+    psChanged();}
   if(id==="importFile"&&e.target.files[0]) readImport(e.target.files[0]);
 });
 document.addEventListener("submit",async e=>{
@@ -918,15 +1013,18 @@ document.addEventListener("submit",async e=>{
   if(e.target.id==="fResult"){
     const err=$("#rErr"); const aid=SH.pickAthlete?$("#rAthlete").value:SH.aid;
     const distKey=$("#rDist").value, meters=distKey==="custom"?Math.round(+$("#rMeters").value):null;
-    const sec=parseTime($("#rTime").value), adj=$("#rAdj").value.trim()?parseFloat($("#rAdj").value):0;
+    const raw=$("#rTime").value, sec=parseTime(raw), adj=$("#rAdj").value.trim()?parseFloat($("#rAdj").value):0;
     const fail=m=>{err.textContent=m;err.hidden=false};
     if(!aid||!S.athletes[aid]) return fail("Choose a runner.");
     if(distKey==="custom"&&!(meters>=100)) return fail("Enter the distance in meters, 100 or more.");
-    if(!isFinite(sec)||sec<=0) return fail("Enter the time as mm:ss, like 17:45 or 17:45.3.");
+    const terr=timeErr(raw,distKey==="custom"?meters/1000:DMAP[distKey].km,distKey==="custom"?`${meters}m`:DMAP[distKey].label);
+    if(terr){$("#rTime").setAttribute("aria-invalid","true"); return fail(terr);}
     if(isNaN(adj)) return fail("Course adjustment must be a number of seconds, like -20.");
-    const id=SH.r?.id||uid();
+    const id=SH.r?.id||uid(), cond=[...document.querySelectorAll('#rCond [aria-pressed="true"]')].map(b=>b.dataset.v);
     const r={...(SH.r||{created:Date.now()}),athleteId:aid,kind:$("#rKind").value,meet:$("#rMeet").value.trim(),date:$("#rDate").value||today(),distKey,meters,seconds:sec,adj,notes:$("#rNotes").value.trim()};
+    if(cond.length) r.cond=cond; else delete r.cond;
     delete r.id; const wantBasis=$("#rBasis").checked, a=S.athletes[aid], wasNew=!SH.r, picked=!!SH.pickAthlete;
+    if(wasNew){U.rlast={dist:distKey,meters:meters||"",kind:r.kind,meet:r.meet,date:r.date,at:Date.now()};saveUI()} // prefills the next result
     closeSheet(); await put("results",id,r);
     if(wantBasis&&a.basisId!==id) await put("athletes",aid,{...a,basisId:id});
     else if(!wantBasis&&a.basisId===id) await put("athletes",aid,{...a,basisId:null});
@@ -940,8 +1038,14 @@ addEventListener("keydown",e=>{if(e.key==="Escape"&&SH)closeSheet()});
 /* ============ team pace sheet (image export) ============ */
 const expDist = m => Math.abs(m-1609.344)<.5 ? "Mile" : `${m}m`;
 const expZone = z => z.n.replace(/\b\w/g,c=>c.toUpperCase());
-const colHead = c => `${expDist(c.m)} ${expZone(ZONES[c.z])}`;
-const psAutoTitle = cfg => cfg.cols.map(c=>colHead(c)+" Pace").join(" / ");
+// Column header as [distance, what]; one line when it fits ("Mile Threshold", "5K Finish", "5K Pace /mi", "5K Mile Splits", "3 Mile Splits")
+const colLines = c => c.k==="race"
+  ? [PS_RACE[c.dk], c.show==="pace"?"Pace /mi":c.show==="splits"?(/Mile$/.test(PS_RACE[c.dk])?"Splits":"Mile Splits"):"Finish"]
+  : [expDist(c.m), expZone(ZONES[c.z])];
+const colHead = c => colLines(c).join(" ");
+const psAutoTitle = cfg => cfg.cols.map(c=>colHead(c)+(c.k==="race"?"":" Pace")).join(" / ");
+const PS_EST_NOTE = "* Estimated pace — no race yet", PS_FOOT_H = 40; // footnote under the table, only when a row is estimated
+const psName = r => r.a.name+(estPace(r.c)?" *":"");
 // Hundredths cut off like Final Surge, always two decimals like the coach's sheet ("5:50.00")
 function fmt2(s){
   if(!isFinite(s)) return "–";
@@ -949,8 +1053,16 @@ function fmt2(s){
   return h ? `${h}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}.${f}` : m ? `${m}:${String(sec).padStart(2,"0")}.${f}` : `${sec}.${f}`;
 }
 function psCell(c,col,end){
+  if(col.k==="race") return raceCell(c,col); // "Time shown" only applies to training zones
   const p=Tin.zone(c.v,ZONES[col.z],col.m); if(!p) return "–";
   return end==="slow"?fmt2(p[0]) : end==="mid"?fmt2((p[0]+p[1])/2) : end==="range"?`${fmt2(p[0])}–${fmt2(p[1])}` : fmt2(p[1]);
+}
+// Race plan from the runner's Tinman equivalent time: finish, per-mile pace, or even-pace mile marks in whole seconds ("5:43 · 11:26 · 17:09")
+function raceCell(c,col){
+  const km=DMAP[col.dk].km, t=Tin.equiv(km,c.t3k), mi=km/1.609344;
+  if(col.show==="pace") return fmt2(t/mi);
+  if(col.show==="splits") return Array.from({length:Math.floor(mi+1e-9)},(_,i)=>fmt(t/mi*(i+1))).join(" · ");
+  return fmt2(t);
 }
 function psRows(cfg){
   const pool=Object.values(S.athletes).filter(a=>(cfg.grp==="All"||a.group===cfg.grp)&&(cfg.gender==="all"||a.gender===cfg.gender));
@@ -961,7 +1073,7 @@ function psRows(cfg){
 function psSubtitle(cfg,page,pages){
   const team=(typeof SET!=="undefined"&&SET.team)||"";
   const d=new Date().toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});
-  const note={mid:"Middle of Tinman range",slow:"Slow end of Tinman range",range:"Tinman range, slow–fast"}[cfg.end]||"";
+  const note=cfg.cols.some(c=>c.k!=="race")&&{mid:"Middle of Tinman range",slow:"Slow end of Tinman range",range:"Tinman range, slow–fast"}[cfg.end]||"";
   return [team, cfg.grp!=="All"?cfg.grp:"", {f:"Girls",m:"Boys"}[cfg.gender]||"", note, d, pages>1?`Page ${page+1} of ${pages}`:""].filter(Boolean).join("  ·  ");
 }
 const PS_FONT='"Helvetica Neue",Helvetica,Arial,sans-serif';
@@ -974,11 +1086,11 @@ function psLayout(cfg,rows){
   const headLines=heads.map((h,i)=>{
     const hw=Math.ceil(ctx.measureText(h).width+36);
     if(hw<=Math.max(colW[i],284)){ colW[i]=Math.max(colW[i],hw); return [h]; }
-    const col=cfg.cols[i], lines=[expDist(col.m), expZone(ZONES[col.z])];
+    const lines=colLines(cfg.cols[i]);
     colW[i]=Math.max(colW[i],...lines.map(l=>ctx.measureText(l).width+36)); return lines;
   });
   ctx.font=`700 28px ${PS_FONT}`;
-  let nameW=Math.min(560,Math.max(320,...rows.map(r=>ctx.measureText(r.a.name).width+48)));
+  let nameW=Math.min(560,Math.max(320,...rows.map(r=>ctx.measureText(psName(r)).width+48)));
   let extra=MINW-PAD*2-nameW-colW.reduce((x,y)=>x+y,0);
   for(let i=0;i<colW.length&&extra>0;i++){const add=Math.min(extra,Math.max(0,284-colW[i]));colW[i]+=add;extra-=add}
   if(extra>0) nameW+=extra;
@@ -994,7 +1106,7 @@ function psDrawPage(L,cfg,rows,page,pages){
   const {PAD,W,nameW,colW,headLines,headH,ROW}=L;
   const title=(cfg.title||"").trim()||psAutoTitle(cfg), sub=psSubtitle(cfg,page,pages);
   const top=36, titleH=44, subH=sub?34:0, gap=24, tableY=top+titleH+subH+gap;
-  const H=tableY+headH+rows.length*ROW+48;
+  const foot=rows.some(r=>estPace(r.c)), H=tableY+headH+rows.length*ROW+48+(foot?PS_FOOT_H:0);
   const cv=document.createElement("canvas"); cv.width=W; cv.height=H;
   const ctx=cv.getContext("2d"); ctx.textBaseline="middle";
   ctx.fillStyle="#FFFFFF"; ctx.fillRect(0,0,W,H);
@@ -1019,7 +1131,7 @@ function psDrawPage(L,cfg,rows,page,pages){
     const y=tableY+headH+i*ROW;
     ctx.fillStyle=i%2?"#F4F4F4":"#FFFFFF"; ctx.fillRect(PAD,y,right-PAD,ROW);
     ctx.fillStyle="#111111"; ctx.textAlign="left"; ctx.font=`700 28px ${PS_FONT}`;
-    ctx.fillText(psFit(ctx,r.a.name,nameW-40),PAD+20,y+ROW/2+1);
+    ctx.fillText(psFit(ctx,psName(r),nameW-40),PAD+20,y+ROW/2+1);
     ctx.textAlign="center"; ctx.font=`400 28px ${PS_FONT}`;
     cfg.cols.forEach((col,k)=>ctx.fillText(psFit(ctx,psCell(r.c,col,cfg.end),colW[k]-16),(xs[k+1]+xs[k+2])/2,y+ROW/2+1));
   });
@@ -1029,6 +1141,8 @@ function psDrawPage(L,cfg,rows,page,pages){
   for(let i=0;i<=rows.length;i++){const y=Math.round(tableY+headH+i*ROW)+.5;ctx.beginPath();ctx.moveTo(PAD,y);ctx.lineTo(right,y);ctx.stroke()}
   xs.forEach((x,i)=>{ctx.strokeStyle=i===0||i===xs.length-1?"#D0D0D0":"#C8C8C8";ctx.beginPath();ctx.moveTo(Math.round(x)+.5,tableY+headH);ctx.lineTo(Math.round(x)+.5,bottom);ctx.stroke()});
   ctx.strokeStyle="#555555"; xs.slice(1,-1).forEach(x=>{ctx.beginPath();ctx.moveTo(Math.round(x)+.5,tableY);ctx.lineTo(Math.round(x)+.5,tableY+headH);ctx.stroke()});
+  // footnote for runners whose paces come from a coach estimate
+  if(foot){ctx.fillStyle="#555555";ctx.textAlign="left";ctx.font=`400 22px ${PS_FONT}`;ctx.fillText(psFit(ctx,PS_EST_NOTE,right-PAD),PAD,bottom+34)}
   return cv;
 }
 function psClear(){ if(SH?.imgs){ SH.imgs.forEach(x=>{try{URL.revokeObjectURL(x.url)}catch{}}); SH.imgs=null; } }
@@ -1047,7 +1161,7 @@ async function psMake(){
   const btn=document.querySelector('[data-act="psMake"]'); if(btn){btn.disabled=true;btn.lastChild.textContent="Creating…"}
   const L=psLayout(cfg,rows);
   // iPhones on iOS 17 can't make a canvas over 4096×4096 pixels in area, so very long sheets split into pages
-  const cap=Math.max(1,Math.floor((Math.min(16777216/L.W,32767)-(138+L.headH+48))/L.ROW));
+  const cap=Math.max(1,Math.floor((Math.min(16777216/L.W,32767)-(138+L.headH+48+(rows.some(r=>estPace(r.c))?PS_FOOT_H:0)))/L.ROW));
   const want=cfg.per>0?cfg.per:rows.length, per=Math.min(want,cap), pages=Math.ceil(rows.length/per), size=Math.ceil(rows.length/pages);
   const slug=((cfg.title||"").trim()||psAutoTitle(cfg)).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,60)||"pace-sheet";
   const imgs=[];
@@ -1078,21 +1192,23 @@ async function psShare(){
 }
 function psText(cfg){
   const {rows}=psRows(cfg), heads=cfg.cols.map(colHead);
-  return [(cfg.title||"").trim()||psAutoTitle(cfg), psSubtitle(cfg,0,1), ""].concat(rows.map(({a,c})=>`${a.name}: `+cfg.cols.map((col,i)=>`${heads[i]} ${psCell(c,col,cfg.end)}`).join(" · "))).join("\n");
+  return [(cfg.title||"").trim()||psAutoTitle(cfg), psSubtitle(cfg,0,1), ""].concat(rows.map(r=>`${psName(r)}: `+cfg.cols.map((col,i)=>`${heads[i]} ${psCell(r.c,col,cfg.end)}`).join(" · ")))
+    .concat(rows.some(r=>estPace(r.c))?["",PS_EST_NOTE]:[]).join("\n");
 }
 
 /* ============ text exports ============ */
 function pacesText(a){
   const c=athleteCalc(a); if(!c) return "";
-  const lines=[`${a.name} — training paces`,`From ${distLabel(c.basis)} ${fmtRace(+c.basis.seconds)} (${fmtDate(c.basis.date)}) · rating ${(c.rating*100).toFixed(1)}%`,""];
+  const lines=[`${a.name} — training paces`,`${estPace(c)?"Estimated from":"From"} ${distLabel(c.basis)} ${fmtRace(+c.basis.seconds)} (${fmtDate(c.basis.date)}) · rating ${(c.rating*100).toFixed(1)}%`,""];
   ZONES.forEach(z=>{const mi=Tin.zone(c.v,z,1609.344),r=Tin.zone(c.v,z,U.rep);
     lines.push(`${z.n}: ${mi?fmtRange(mi)+" /mi":""}${r?`${mi?" · ":""}${repLabel(U.rep)} ${fmtRange(r)}`:""}`)});
   return lines.join("\n");
 }
 function workoutText(){
-  const w=U.wo,z=ZONES[w.zone];
-  const rows=Object.values(S.athletes).filter(a=>(w.grp==="All"||a.group===w.grp)&&(w.gender==="all"||a.gender===w.gender)).map(a=>({a,c:athleteCalc(a)})).sort((x,y)=>(y.c?.rating||0)-(x.c?.rating||0));
-  return [`${repLabel(w.rep)} @ ${z.n}${w.grp!=="All"?` · ${w.grp}`:""}`,""].concat(rows.map(({a,c})=>{const p=c?Tin.zone(c.v,z,w.rep):null;return `${a.name}: ${p?fmtRange(p):"no result yet"}`})).join("\n");
+  const w=U.wo, z=ZONES[w.zone], tm=w.mode==="time", L=woLoop(), rows=woRows();
+  return [`${tm?fmt(w.sec):repLabel(w.rep)} @ ${z.n}${tm&&L?` · ${L}m loop`:""}${w.grp!=="All"?` · ${w.grp}`:""}`,""]
+    .concat(rows.map(r=>{const t=woCell(r.c);return `${psName(r)}: ${t?t[0]+(t[1]?` (${t[1]})`:""):"no result yet"}`}))
+    .concat(rows.some(r=>estPace(r.c))?["",PS_EST_NOTE]:[]).join("\n");
 }
 
 /* ============ backup ============ */
